@@ -56,8 +56,8 @@ public sealed class Order : BaseEntity
     public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 
     // Navigation
-    public User User { get; set; } = default!;
-    public GenerationTask GenerationTask { get; set; } = default!;
+    public User? User { get; set; }
+    public GenerationTask? GenerationTask { get; set; }
     public PricingPackage PricingPackage { get; set; } = default!;
     public PartnerLab? PartnerLab { get; set; }
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
