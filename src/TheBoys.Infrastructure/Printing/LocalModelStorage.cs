@@ -43,11 +43,12 @@ public sealed class LocalModelStorage(IHostEnvironment env, IConfiguration confi
         var uri = new Uri(url);
         // Dedicated client: provider Authorization headers are never sent to asset hosts.
         var client = clients.CreateClient("ModelAssets");
-        var allowedHosts = meshyOptions.Value.AssetHosts.Concat(tripoOptions.Value.AssetHosts).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var allowedHosts = meshyOptions.Value.AssetHosts.Concat(tripoOptions.Value.AssetHosts)
+            .ToArray();
         for (var redirects = 0; redirects <= 3; redirects++)
         {
             if (uri.Scheme != "https" || !uri.IsDefaultPort || !string.IsNullOrEmpty(uri.UserInfo)
-                || !allowedHosts.Contains(uri.Host))
+                || !IsAllowedAssetHost(uri.Host, allowedHosts))
                 throw new InvalidDataException("Host tải model không thuộc danh sách cho phép.");
             using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, ct);
             if ((int)response.StatusCode is >= 300 and < 400 && response.Headers.Location is { } location)
@@ -87,4 +88,17 @@ public sealed class LocalModelStorage(IHostEnvironment env, IConfiguration confi
         }
         throw new InvalidDataException("Quá nhiều chuyển hướng tải model.");
     }
+
+    private static bool IsAllowedAssetHost(string host, IEnumerable<string> allowedHosts) =>
+        allowedHosts.Any(allowedHost =>
+        {
+            if (allowedHost.StartsWith("*.", StringComparison.Ordinal))
+            {
+                var suffix = allowedHost[1..];
+                return host.Length > suffix.Length
+                    && host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
+            }
+
+            return string.Equals(host, allowedHost, StringComparison.OrdinalIgnoreCase);
+        });
 }

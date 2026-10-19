@@ -19,7 +19,7 @@ public sealed class TripoOptions
     public string ApiKey { get; set; } = "";
     public string DefaultEngine { get; set; } = "v3.1-20260211";
     public int PollIntervalSeconds { get; set; } = 5;
-    public string[] AssetHosts { get; set; } = ["cdn.tripo3d.ai"];
+    public string[] AssetHosts { get; set; } = ["cdn.tripo3d.ai", "*.data.tripo3d.com"];
 }
 
 public sealed class PrintPricingOptions
