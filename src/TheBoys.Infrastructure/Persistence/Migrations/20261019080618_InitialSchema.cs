@@ -1,336 +1,216 @@
-﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace TheBoys.Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
     public partial class InitialSchema : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "PricingPackages",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    PackageCode = table.Column<string>(type: "varchar(50)", unicode: false, maxLength: 50, nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    PriceVnd = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    PartnerBaseCostVnd = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false, defaultValue: 120000.00m),
-                    Material = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    HeightRangeCm = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    IsActive = table.Column<bool>(type: "bit", nullable: false),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_PricingPackages", x => x.Id);
-                    table.CheckConstraint("CK_PricingPackages_Metrics", "[PriceVnd] > 0 AND [PartnerBaseCostVnd] >= 0");
-                });
+            // Both branches published an initial migration. Preserve both history IDs,
+            // but create the shared tables only when the other baseline has not run.
+            migrationBuilder.Sql("""
+                IF NOT EXISTS (SELECT 1 FROM [__EFMigrationsHistory]
+                    WHERE [MigrationId] = N'20261019080454_InitialCreate')
+                BEGIN
+                CREATE TABLE [PricingPackages] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [PackageCode] varchar(50) NOT NULL,
+                    [Name] nvarchar(max) NOT NULL,
+                    [PriceVnd] decimal(18,2) NOT NULL,
+                    [PartnerBaseCostVnd] decimal(18,2) NOT NULL DEFAULT 120000.0,
+                    [Material] nvarchar(50) NOT NULL,
+                    [HeightRangeCm] nvarchar(50) NOT NULL,
+                    [Description] nvarchar(max) NULL,
+                    [IsActive] bit NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    CONSTRAINT [PK_PricingPackages] PRIMARY KEY ([Id]),
+                    CONSTRAINT [CK_PricingPackages_Metrics] CHECK ([PriceVnd] > 0 AND [PartnerBaseCostVnd] >= 0)
+                );
 
-            migrationBuilder.CreateTable(
-                name: "Users",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Email = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: false),
-                    PasswordHash = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    FullName = table.Column<string>(type: "nvarchar(150)", maxLength: 150, nullable: false),
-                    PhoneNumber = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: true),
-                    Role = table.Column<int>(type: "int", nullable: false),
-                    DeviceFingerprint = table.Column<string>(type: "varchar(100)", unicode: false, maxLength: 100, nullable: true),
-                    IsPhoneVerified = table.Column<bool>(type: "bit", nullable: false),
-                    FreeTrialRemaining = table.Column<int>(type: "int", nullable: false, defaultValue: 2),
-                    PurchasedRemaining = table.Column<int>(type: "int", nullable: false, defaultValue: 0),
-                    TotalUsed = table.Column<int>(type: "int", nullable: false, defaultValue: 0),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
-                    DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Users", x => x.Id);
-                    table.CheckConstraint("CK_Users_CreditsNonNegative", "[FreeTrialRemaining] >= 0 AND [PurchasedRemaining] >= 0 AND [TotalUsed] >= 0");
-                });
+                CREATE TABLE [Users] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [Email] nvarchar(255) NOT NULL,
+                    [PasswordHash] nvarchar(max) NULL,
+                    [FullName] nvarchar(150) NOT NULL,
+                    [PhoneNumber] varchar(20) NULL,
+                    [Role] int NOT NULL,
+                    [DeviceFingerprint] varchar(100) NULL,
+                    [IsPhoneVerified] bit NOT NULL,
+                    [FreeTrialRemaining] int NOT NULL DEFAULT 2,
+                    [PurchasedRemaining] int NOT NULL DEFAULT 0,
+                    [TotalUsed] int NOT NULL DEFAULT 0,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    [IsDeleted] bit NOT NULL,
+                    [DeletedAtUtc] datetime2 NULL,
+                    [RowVersion] rowversion NOT NULL,
+                    CONSTRAINT [PK_Users] PRIMARY KEY ([Id]),
+                    CONSTRAINT [CK_Users_CreditsNonNegative] CHECK ([FreeTrialRemaining] >= 0 AND [PurchasedRemaining] >= 0 AND [TotalUsed] >= 0)
+                );
 
-            migrationBuilder.CreateTable(
-                name: "GenerationTasks",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    TaskType = table.Column<int>(type: "int", nullable: false),
-                    Prompt = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                    ArtStyle = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
-                    InputImageUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                    CleanedImageUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                    Status = table.Column<int>(type: "int", nullable: false),
-                    ProviderTaskId = table.Column<string>(type: "varchar(150)", unicode: false, maxLength: 150, nullable: true),
-                    ErrorMessage = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    RetryCount = table.Column<int>(type: "int", nullable: false),
-                    DurationSeconds = table.Column<int>(type: "int", nullable: true),
-                    CompletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    ModelName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: true),
-                    StoragePathGlb = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                    StoragePathStl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                    ThumbnailUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                    Polycount = table.Column<int>(type: "int", nullable: true),
-                    VertexCount = table.Column<int>(type: "int", nullable: true),
-                    IsWatertight = table.Column<bool>(type: "bit", nullable: false),
-                    MinWallThicknessMm = table.Column<decimal>(type: "decimal(5,2)", precision: 5, scale: 2, nullable: true),
-                    BoundingBoxX_Mm = table.Column<decimal>(type: "decimal(8,2)", precision: 8, scale: 2, nullable: true),
-                    BoundingBoxY_Mm = table.Column<decimal>(type: "decimal(8,2)", precision: 8, scale: 2, nullable: true),
-                    BoundingBoxZ_Mm = table.Column<decimal>(type: "decimal(8,2)", precision: 8, scale: 2, nullable: true),
-                    EstimatedVolumeCm3 = table.Column<decimal>(type: "decimal(8,2)", precision: 8, scale: 2, nullable: true),
-                    IsApprovedForPrinting = table.Column<bool>(type: "bit", nullable: false),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false),
-                    DeletedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_GenerationTasks", x => x.Id);
-                    table.CheckConstraint("CK_GenerationTasks_Metrics", "([Polycount] IS NULL OR [Polycount] >= 0) AND ([VertexCount] IS NULL OR [VertexCount] >= 0)");
-                    table.ForeignKey(
-                        name: "FK_GenerationTasks_Users_UserId",
-                        column: x => x.UserId,
-                        principalTable: "Users",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                });
+                CREATE TABLE [GenerationTasks] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [UserId] uniqueidentifier NOT NULL,
+                    [TaskType] int NOT NULL,
+                    [Prompt] nvarchar(1000) NULL,
+                    [ArtStyle] nvarchar(50) NULL,
+                    [InputImageUrl] nvarchar(1000) NULL,
+                    [CleanedImageUrl] nvarchar(1000) NULL,
+                    [Status] int NOT NULL,
+                    [ProviderTaskId] varchar(150) NULL,
+                    [ErrorMessage] nvarchar(max) NULL,
+                    [RetryCount] int NOT NULL,
+                    [DurationSeconds] int NULL,
+                    [CompletedAtUtc] datetime2 NULL,
+                    [ModelName] nvarchar(200) NULL,
+                    [StoragePathGlb] nvarchar(1000) NULL,
+                    [StoragePathStl] nvarchar(1000) NULL,
+                    [ThumbnailUrl] nvarchar(1000) NULL,
+                    [Polycount] int NULL,
+                    [VertexCount] int NULL,
+                    [IsWatertight] bit NOT NULL,
+                    [MinWallThicknessMm] decimal(5,2) NULL,
+                    [BoundingBoxX_Mm] decimal(8,2) NULL,
+                    [BoundingBoxY_Mm] decimal(8,2) NULL,
+                    [BoundingBoxZ_Mm] decimal(8,2) NULL,
+                    [EstimatedVolumeCm3] decimal(8,2) NULL,
+                    [IsApprovedForPrinting] bit NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    [IsDeleted] bit NOT NULL,
+                    [DeletedAtUtc] datetime2 NULL,
+                    [RowVersion] rowversion NOT NULL,
+                    CONSTRAINT [PK_GenerationTasks] PRIMARY KEY ([Id]),
+                    CONSTRAINT [CK_GenerationTasks_Metrics] CHECK (([Polycount] IS NULL OR [Polycount] >= 0) AND ([VertexCount] IS NULL OR [VertexCount] >= 0)),
+                    CONSTRAINT [FK_GenerationTasks_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([Id]) ON DELETE NO ACTION
+                );
 
-            migrationBuilder.CreateTable(
-                name: "PartnerLabs",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    LabName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    ContactPerson = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    PhoneNumber = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: false),
-                    Email = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    District = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    Address = table.Column<string>(type: "nvarchar(300)", maxLength: 300, nullable: false),
-                    CapacityPerDay = table.Column<int>(type: "int", nullable: false),
-                    IsActive = table.Column<bool>(type: "bit", nullable: false),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_PartnerLabs", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_PartnerLabs_Users_UserId",
-                        column: x => x.UserId,
-                        principalTable: "Users",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
-                });
+                CREATE TABLE [PartnerLabs] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [UserId] uniqueidentifier NULL,
+                    [LabName] nvarchar(200) NOT NULL,
+                    [ContactPerson] nvarchar(100) NOT NULL,
+                    [PhoneNumber] varchar(20) NOT NULL,
+                    [Email] nvarchar(max) NULL,
+                    [District] nvarchar(100) NOT NULL,
+                    [Address] nvarchar(300) NOT NULL,
+                    [CapacityPerDay] int NOT NULL,
+                    [IsActive] bit NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    CONSTRAINT [PK_PartnerLabs] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_PartnerLabs_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([Id]) ON DELETE SET NULL
+                );
 
-            migrationBuilder.CreateTable(
-                name: "Orders",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    OrderCode = table.Column<string>(type: "varchar(50)", unicode: false, maxLength: 50, nullable: false),
-                    UserId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    GenerationTaskId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    PricingPackageId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    PartnerLabId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    Status = table.Column<int>(type: "int", nullable: false),
-                    UnitPriceSnapshot = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    PartnerCostSnapshot = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    AiCostBudgetSnapshot = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    DefectBudgetSnapshot = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    ShippingSubsidySnapshot = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    PaymentGatewayFeeSnapshot = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    Quantity = table.Column<int>(type: "int", nullable: false),
-                    SubTotalVnd = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    ShippingFeeRaw = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    FinalShippingFee = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    TotalAmount = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    CustomEngravingText = table.Column<string>(type: "nvarchar(150)", maxLength: 150, nullable: true),
-                    ReceiverName = table.Column<string>(type: "nvarchar(150)", maxLength: 150, nullable: false),
-                    ReceiverPhone = table.Column<string>(type: "varchar(20)", unicode: false, maxLength: 20, nullable: false),
-                    StreetAddress = table.Column<string>(type: "nvarchar(300)", maxLength: 300, nullable: false),
-                    District = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    City = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    CustomerNote = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    TrackingNumber = table.Column<string>(type: "varchar(100)", unicode: false, maxLength: 100, nullable: true),
-                    DefectReason = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
-                    EvidencePhotoUrl = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: true),
-                    EstimatedDefectCostVnd = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: true),
-                    ReprintApproved = table.Column<bool>(type: "bit", nullable: false),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    PaidAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    SentToPartnerAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    PrintingStartedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    PackagedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    ShippedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    DeliveredAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CancelledAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    StatusNote = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: true),
-                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Orders", x => x.Id);
-                    table.CheckConstraint("CK_Orders_Financials", "[SubTotalVnd] >= 0 AND [TotalAmount] >= 0 AND [Quantity] > 0");
-                    table.ForeignKey(
-                        name: "FK_Orders_GenerationTasks_GenerationTaskId",
-                        column: x => x.GenerationTaskId,
-                        principalTable: "GenerationTasks",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_Orders_PartnerLabs_PartnerLabId",
-                        column: x => x.PartnerLabId,
-                        principalTable: "PartnerLabs",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_Orders_PricingPackages_PricingPackageId",
-                        column: x => x.PricingPackageId,
-                        principalTable: "PricingPackages",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_Orders_Users_UserId",
-                        column: x => x.UserId,
-                        principalTable: "Users",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                });
+                CREATE TABLE [Orders] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [OrderCode] varchar(50) NOT NULL,
+                    [UserId] uniqueidentifier NOT NULL,
+                    [GenerationTaskId] uniqueidentifier NOT NULL,
+                    [PricingPackageId] uniqueidentifier NOT NULL,
+                    [PartnerLabId] uniqueidentifier NULL,
+                    [Status] int NOT NULL,
+                    [UnitPriceSnapshot] decimal(18,2) NOT NULL,
+                    [PartnerCostSnapshot] decimal(18,2) NOT NULL,
+                    [AiCostBudgetSnapshot] decimal(18,2) NOT NULL,
+                    [DefectBudgetSnapshot] decimal(18,2) NOT NULL,
+                    [ShippingSubsidySnapshot] decimal(18,2) NOT NULL,
+                    [PaymentGatewayFeeSnapshot] decimal(18,2) NOT NULL,
+                    [Quantity] int NOT NULL,
+                    [SubTotalVnd] decimal(18,2) NOT NULL,
+                    [ShippingFeeRaw] decimal(18,2) NOT NULL,
+                    [FinalShippingFee] decimal(18,2) NOT NULL,
+                    [TotalAmount] decimal(18,2) NOT NULL,
+                    [CustomEngravingText] nvarchar(150) NULL,
+                    [ReceiverName] nvarchar(150) NOT NULL,
+                    [ReceiverPhone] varchar(20) NOT NULL,
+                    [StreetAddress] nvarchar(300) NOT NULL,
+                    [District] nvarchar(100) NOT NULL,
+                    [City] nvarchar(100) NOT NULL,
+                    [CustomerNote] nvarchar(max) NULL,
+                    [TrackingNumber] varchar(100) NULL,
+                    [DefectReason] nvarchar(500) NULL,
+                    [EvidencePhotoUrl] nvarchar(1000) NULL,
+                    [EstimatedDefectCostVnd] decimal(18,2) NULL,
+                    [ReprintApproved] bit NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [PaidAtUtc] datetime2 NULL,
+                    [SentToPartnerAtUtc] datetime2 NULL,
+                    [PrintingStartedAtUtc] datetime2 NULL,
+                    [PackagedAtUtc] datetime2 NULL,
+                    [ShippedAtUtc] datetime2 NULL,
+                    [DeliveredAtUtc] datetime2 NULL,
+                    [CancelledAtUtc] datetime2 NULL,
+                    [StatusNote] nvarchar(500) NULL,
+                    [RowVersion] rowversion NOT NULL,
+                    CONSTRAINT [PK_Orders] PRIMARY KEY ([Id]),
+                    CONSTRAINT [CK_Orders_Financials] CHECK ([SubTotalVnd] >= 0 AND [TotalAmount] >= 0 AND [Quantity] > 0),
+                    CONSTRAINT [FK_Orders_GenerationTasks_GenerationTaskId] FOREIGN KEY ([GenerationTaskId]) REFERENCES [GenerationTasks] ([Id]) ON DELETE NO ACTION,
+                    CONSTRAINT [FK_Orders_PartnerLabs_PartnerLabId] FOREIGN KEY ([PartnerLabId]) REFERENCES [PartnerLabs] ([Id]) ON DELETE NO ACTION,
+                    CONSTRAINT [FK_Orders_PricingPackages_PricingPackageId] FOREIGN KEY ([PricingPackageId]) REFERENCES [PricingPackages] ([Id]) ON DELETE NO ACTION,
+                    CONSTRAINT [FK_Orders_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([Id]) ON DELETE NO ACTION
+                );
 
-            migrationBuilder.CreateTable(
-                name: "Payments",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    OrderId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    PaymentMethod = table.Column<string>(type: "varchar(50)", unicode: false, maxLength: 50, nullable: false),
-                    TransactionReference = table.Column<string>(type: "varchar(150)", unicode: false, maxLength: 150, nullable: false),
-                    Amount = table.Column<decimal>(type: "decimal(18,2)", precision: 18, scale: 2, nullable: false),
-                    Status = table.Column<int>(type: "int", nullable: false),
-                    GatewayResponseJson = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    PaidAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Payments", x => x.Id);
-                    table.CheckConstraint("CK_Payments_PositiveAmount", "[Amount] > 0");
-                    table.ForeignKey(
-                        name: "FK_Payments_Orders_OrderId",
-                        column: x => x.OrderId,
-                        principalTable: "Orders",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                });
+                CREATE TABLE [Payments] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [OrderId] uniqueidentifier NOT NULL,
+                    [PaymentMethod] varchar(50) NOT NULL,
+                    [TransactionReference] varchar(150) NOT NULL,
+                    [Amount] decimal(18,2) NOT NULL,
+                    [Status] int NOT NULL,
+                    [GatewayResponseJson] nvarchar(max) NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [PaidAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_Payments] PRIMARY KEY ([Id]),
+                    CONSTRAINT [CK_Payments_PositiveAmount] CHECK ([Amount] > 0),
+                    CONSTRAINT [FK_Payments_Orders_OrderId] FOREIGN KEY ([OrderId]) REFERENCES [Orders] ([Id]) ON DELETE NO ACTION
+                );
 
-            migrationBuilder.CreateIndex(
-                name: "IX_GenerationTasks_User_Library_ESR",
-                table: "GenerationTasks",
-                columns: new[] { "UserId", "IsApprovedForPrinting", "CreatedAtUtc" },
-                filter: "[IsDeleted] = 0");
+                CREATE INDEX [IX_GenerationTasks_User_Library_ESR] ON [GenerationTasks] ([UserId], [IsApprovedForPrinting], [CreatedAtUtc]) WHERE [IsDeleted] = 0;
 
-            migrationBuilder.CreateIndex(
-                name: "IX_GenerationTasks_User_Status_ESR",
-                table: "GenerationTasks",
-                columns: new[] { "UserId", "Status", "CreatedAtUtc" })
-                .Annotation("SqlServer:Include", new[] { "TaskType", "ProviderTaskId" });
+                CREATE INDEX [IX_GenerationTasks_User_Status_ESR] ON [GenerationTasks] ([UserId], [Status], [CreatedAtUtc]) INCLUDE ([TaskType], [ProviderTaskId]);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Orders_GenerationTaskId",
-                table: "Orders",
-                column: "GenerationTaskId");
+                CREATE INDEX [IX_Orders_GenerationTaskId] ON [Orders] ([GenerationTaskId]);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Orders_Partner_Queue_ESR",
-                table: "Orders",
-                columns: new[] { "PartnerLabId", "Status", "CreatedAtUtc" },
-                filter: "[PartnerLabId] IS NOT NULL");
+                CREATE INDEX [IX_Orders_Partner_Queue_ESR] ON [Orders] ([PartnerLabId], [Status], [CreatedAtUtc]) WHERE [PartnerLabId] IS NOT NULL;
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Orders_PricingPackageId",
-                table: "Orders",
-                column: "PricingPackageId");
+                CREATE INDEX [IX_Orders_PricingPackageId] ON [Orders] ([PricingPackageId]);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Orders_User_Status_ESR",
-                table: "Orders",
-                columns: new[] { "UserId", "Status", "CreatedAtUtc" })
-                .Annotation("SqlServer:Include", new[] { "OrderCode", "TotalAmount" });
+                CREATE INDEX [IX_Orders_User_Status_ESR] ON [Orders] ([UserId], [Status], [CreatedAtUtc]) INCLUDE ([OrderCode], [TotalAmount]);
 
-            migrationBuilder.CreateIndex(
-                name: "UX_Orders_OrderCode",
-                table: "Orders",
-                column: "OrderCode",
-                unique: true);
+                CREATE UNIQUE INDEX [UX_Orders_OrderCode] ON [Orders] ([OrderCode]);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_PartnerLabs_UserId",
-                table: "PartnerLabs",
-                column: "UserId");
+                CREATE INDEX [IX_PartnerLabs_UserId] ON [PartnerLabs] ([UserId]);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Payments_Order_Status",
-                table: "Payments",
-                columns: new[] { "OrderId", "Status" });
+                CREATE INDEX [IX_Payments_Order_Status] ON [Payments] ([OrderId], [Status]);
 
-            migrationBuilder.CreateIndex(
-                name: "UX_Payments_TransactionRef",
-                table: "Payments",
-                column: "TransactionReference",
-                unique: true);
+                CREATE UNIQUE INDEX [UX_Payments_TransactionRef] ON [Payments] ([TransactionReference]);
 
-            migrationBuilder.CreateIndex(
-                name: "UX_PricingPackages_Code",
-                table: "PricingPackages",
-                column: "PackageCode",
-                unique: true);
+                CREATE UNIQUE INDEX [UX_PricingPackages_Code] ON [PricingPackages] ([PackageCode]);
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Users_DeviceFingerprint",
-                table: "Users",
-                column: "DeviceFingerprint",
-                filter: "[DeviceFingerprint] IS NOT NULL AND [IsDeleted] = 0");
+                CREATE INDEX [IX_Users_DeviceFingerprint] ON [Users] ([DeviceFingerprint]) WHERE [DeviceFingerprint] IS NOT NULL AND [IsDeleted] = 0;
 
-            migrationBuilder.CreateIndex(
-                name: "UX_Users_Email_Active",
-                table: "Users",
-                column: "Email",
-                unique: true,
-                filter: "[IsDeleted] = 0");
+                CREATE UNIQUE INDEX [UX_Users_Email_Active] ON [Users] ([Email]) WHERE [IsDeleted] = 0;
+                END;
+                """);
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "Payments");
-
-            migrationBuilder.DropTable(
-                name: "Orders");
-
-            migrationBuilder.DropTable(
-                name: "GenerationTasks");
-
-            migrationBuilder.DropTable(
-                name: "PartnerLabs");
-
-            migrationBuilder.DropTable(
-                name: "PricingPackages");
-
-            migrationBuilder.DropTable(
-                name: "Users");
+            // The last remaining baseline owns the shared tables during rollback.
+            migrationBuilder.Sql("""
+                IF NOT EXISTS (SELECT 1 FROM [__EFMigrationsHistory]
+                    WHERE [MigrationId] = N'20261019080454_InitialCreate')
+                BEGIN
+                    DROP TABLE [Payments];
+                    DROP TABLE [Orders];
+                    DROP TABLE [GenerationTasks];
+                    DROP TABLE [PartnerLabs];
+                    DROP TABLE [PricingPackages];
+                    DROP TABLE [Users];
+                END;
+                """);
         }
     }
 }

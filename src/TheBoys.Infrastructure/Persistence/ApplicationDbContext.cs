@@ -22,4 +22,11 @@ public sealed class ApplicationDbContext : DbContext, IApplicationDbContext
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
     }
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        // Enforce DATETIME2(3) precision matching SQL DDL
+        configurationBuilder.Properties<DateTime>().HavePrecision(3);
+        configurationBuilder.Properties<DateTime?>().HavePrecision(3);
+    }
 }

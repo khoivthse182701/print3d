@@ -81,6 +81,10 @@ public sealed class PricingPackageConfiguration : IEntityTypeConfiguration<Prici
             .IsUnicode(false)
             .IsRequired();
 
+        builder.Property(x => x.Name)
+            .HasMaxLength(150)
+            .IsRequired();
+
         builder.Property(x => x.PriceVnd)
             .HasPrecision(18, 2)
             .IsRequired();
@@ -97,6 +101,9 @@ public sealed class PricingPackageConfiguration : IEntityTypeConfiguration<Prici
         builder.Property(x => x.HeightRangeCm)
             .HasMaxLength(50)
             .IsRequired();
+
+        builder.Property(x => x.Description)
+            .HasMaxLength(500);
 
         builder.HasIndex(x => x.PackageCode)
             .HasDatabaseName("UX_PricingPackages_Code")
@@ -117,8 +124,10 @@ public sealed class PartnerLabConfiguration : IEntityTypeConfiguration<PartnerLa
         builder.Property(x => x.LabName).HasMaxLength(200).IsRequired();
         builder.Property(x => x.ContactPerson).HasMaxLength(100).IsRequired();
         builder.Property(x => x.PhoneNumber).HasMaxLength(20).IsUnicode(false).IsRequired();
+        builder.Property(x => x.Email).HasMaxLength(255);
         builder.Property(x => x.District).HasMaxLength(100).IsRequired();
         builder.Property(x => x.Address).HasMaxLength(300).IsRequired();
+        builder.Property(x => x.CapacityPerDay).HasDefaultValue(20);
 
         builder.HasOne(x => x.User)
             .WithMany()
@@ -144,6 +153,7 @@ public sealed class GenerationTaskConfiguration : IEntityTypeConfiguration<Gener
         builder.Property(x => x.Prompt).HasMaxLength(1000);
         builder.Property(x => x.ArtStyle).HasMaxLength(50);
         builder.Property(x => x.ProviderTaskId).HasMaxLength(150).IsUnicode(false);
+        builder.Property(x => x.ErrorMessage).HasMaxLength(1000);
         builder.Property(x => x.InputImageUrl).HasMaxLength(1000);
         builder.Property(x => x.CleanedImageUrl).HasMaxLength(1000);
 
@@ -206,17 +216,19 @@ public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(x => x.FinalShippingFee).HasPrecision(18, 2).IsRequired();
         builder.Property(x => x.TotalAmount).HasPrecision(18, 2).IsRequired();
 
+        builder.Property(x => x.Quantity).HasDefaultValue(1);
         builder.Property(x => x.ReceiverName).HasMaxLength(150).IsRequired();
         builder.Property(x => x.ReceiverPhone).HasMaxLength(20).IsUnicode(false).IsRequired();
         builder.Property(x => x.StreetAddress).HasMaxLength(300).IsRequired();
         builder.Property(x => x.District).HasMaxLength(100).IsRequired();
-        builder.Property(x => x.City).HasMaxLength(100).IsRequired();
+        builder.Property(x => x.City).HasMaxLength(100).HasDefaultValue("Thành phố Hồ Chí Minh").IsRequired();
         builder.Property(x => x.CustomEngravingText).HasMaxLength(150);
+        builder.Property(x => x.CustomerNote).HasMaxLength(500);
         builder.Property(x => x.TrackingNumber).HasMaxLength(100).IsUnicode(false);
 
         builder.Property(x => x.DefectReason).HasMaxLength(500);
         builder.Property(x => x.EvidencePhotoUrl).HasMaxLength(1000);
-        builder.Property(x => x.EstimatedDefectCostVnd).HasPrecision(18, 2);
+        builder.Property(x => x.EstimatedDefectCostVnd).HasPrecision(18, 2).HasDefaultValue(6000.00m);
         builder.Property(x => x.StatusNote).HasMaxLength(500);
 
         builder.Property(x => x.RowVersion).IsRowVersion();
@@ -236,10 +248,18 @@ public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
             .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.Navigation(x => x.User)
+            .IsRequired(false);
+
         builder.HasOne(x => x.GenerationTask)
             .WithMany()
             .HasForeignKey(x => x.GenerationTaskId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Tell EF Core that while GenerationTaskId is required in DB,
+        // the navigation can be null in memory if GenerationTask was soft-deleted (resolves Warning 10622)
+        builder.Navigation(x => x.GenerationTask)
+            .IsRequired(false);
 
         builder.HasOne(x => x.PricingPackage)
             .WithMany()

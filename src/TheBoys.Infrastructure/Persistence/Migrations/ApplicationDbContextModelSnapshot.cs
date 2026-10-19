@@ -66,26 +66,30 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(64)");
 
                     b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<string>("ConvertTaskId")
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<bool>("CreditRefunded")
                         .HasColumnType("bit");
 
                     b.Property<DateTime?>("DeletedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<int?>("DurationSeconds")
                         .HasColumnType("int");
 
                     b.Property<string>("ErrorMessage")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<decimal?>("EstimatedVolumeCm3")
                         .HasPrecision(18, 4)
@@ -113,7 +117,8 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(200)");
 
                     b.Property<DateTime?>("NextPollAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<int?>("Polycount")
                         .HasColumnType("int");
@@ -174,7 +179,8 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("ReviewedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<Guid?>("ReviewedByUserId")
                         .HasColumnType("uniqueidentifier");
@@ -213,7 +219,8 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(1000)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uniqueidentifier");
@@ -254,12 +261,15 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime?>("CancelledAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<string>("City")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                        .HasColumnType("nvarchar(100)")
+                        .HasDefaultValue("Thành phố Hồ Chí Minh");
 
                     b.Property<string>("ClientRequestId")
                         .IsRequired()
@@ -267,14 +277,16 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(64)");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<string>("CustomEngravingText")
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
                     b.Property<string>("CustomerNote")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<decimal>("DefectBudgetSnapshot")
                         .HasPrecision(18, 2)
@@ -285,7 +297,8 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(500)");
 
                     b.Property<DateTime?>("DeliveredAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<decimal>("DepthMmSnapshot")
                         .HasPrecision(10, 2)
@@ -297,8 +310,10 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<decimal?>("EstimatedDefectCostVnd")
+                        .ValueGeneratedOnAdd()
                         .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
+                        .HasColumnType("decimal(18,2)")
+                        .HasDefaultValue(6000.00m);
 
                     b.Property<string>("EvidencePhotoUrl")
                         .HasMaxLength(1000)
@@ -327,10 +342,12 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("varchar(50)");
 
                     b.Property<DateTime?>("PackagedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<DateTime?>("PaidAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<decimal>("PartnerCostSnapshot")
                         .HasPrecision(18, 2)
@@ -350,10 +367,13 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("PrintingStartedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<int>("Quantity")
-                        .HasColumnType("int");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
 
                     b.Property<string>("ReceiverName")
                         .IsRequired()
@@ -381,10 +401,12 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("rowversion");
 
                     b.Property<DateTime?>("SentToPartnerAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<DateTime?>("ShippedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<decimal>("ShippingFeeRaw")
                         .HasPrecision(18, 2)
@@ -470,7 +492,9 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(300)");
 
                     b.Property<int>("CapacityPerDay")
-                        .HasColumnType("int");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(20);
 
                     b.Property<string>("ContactPerson")
                         .IsRequired()
@@ -478,7 +502,8 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<string>("District")
                         .IsRequired()
@@ -486,7 +511,8 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Email")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -523,7 +549,8 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<string>("GatewayResponseJson")
                         .HasColumnType("nvarchar(max)");
@@ -532,7 +559,8 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime?>("PaidAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<string>("PaymentMethod")
                         .IsRequired()
@@ -571,10 +599,12 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<string>("Description")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("HeightRangeCm")
                         .IsRequired()
@@ -597,7 +627,8 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
 
                     b.Property<string>("PackageCode")
                         .IsRequired()
@@ -634,10 +665,12 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<DateTime?>("DeletedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.Property<string>("DeviceFingerprint")
                         .HasMaxLength(100)
@@ -693,7 +726,8 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0);
 
                     b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("datetime2");
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
 
                     b.HasKey("Id");
 
@@ -728,8 +762,7 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                     b.HasOne("TheBoys.Domain.Entities.GenerationTask", "GenerationTask")
                         .WithMany()
                         .HasForeignKey("GenerationTaskId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("TheBoys.Domain.Entities.PartnerLab", "PartnerLab")
                         .WithMany("Orders")
@@ -745,8 +778,7 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                     b.HasOne("TheBoys.Domain.Entities.User", "User")
                         .WithMany("Orders")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("GenerationTask");
 

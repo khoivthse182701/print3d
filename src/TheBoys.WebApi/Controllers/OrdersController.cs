@@ -25,7 +25,7 @@ public sealed class CreateOrderRequest
     [Required, MaxLength(300)] public string StreetAddress { get; set; } = "";
     [Required, MaxLength(100)] public string District { get; set; } = "";
     [Required, MaxLength(100)] public string City { get; set; } = "Thành phố Hồ Chí Minh";
-    [MaxLength(1000)] public string? CustomerNote { get; set; }
+    [MaxLength(500)] public string? CustomerNote { get; set; }
 }
 public sealed class UpdateOrderStatusRequest
 {

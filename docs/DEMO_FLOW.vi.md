@@ -128,6 +128,10 @@ Nếu database đã được tạo từ `database/TheBoys_Schema_DDL.sql`, khôn
 
 ## Kiểm thử
 
+Sau khi đồng bộ `main`, mở `TheBoys.sln` (WebApi là project đầu tiên) hoặc `TheBoys.slnx`; cả hai đều có project test.
+
+Lịch sử EF giữ cả `InitialCreate` từ `main` và `InitialSchema` từ `2DTo3D`. Hai baseline kiểm tra lịch sử của nhau để chỉ tạo bảng một lần. Migration `MergeMainSchemaAlignment` đồng bộ độ chính xác thời gian, giới hạn độ dài và giá trị mặc định từ `main`. Database đã chạy một trong hai nhánh có thể chạy migration tiếp; tests kiểm tra cả database mới và nâng cấp từ từng nhánh. Nếu dữ liệu cũ vượt giới hạn mới (ví dụ ghi chú đơn hàng trên 500 ký tự), cần xử lý dữ liệu đó trước khi nâng cấp; migration không tự cắt nội dung.
+
 ```powershell
 dotnet test TheBoys.slnx
 ```
