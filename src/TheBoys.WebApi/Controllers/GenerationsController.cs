@@ -2,15 +2,17 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
+using TheBoys.Application.Generations.Commands.CreateGenerationTask;
+using TheBoys.Application.Generations.Commands.RecoverGenerationTask;
+using TheBoys.Application.Generations.Commands.ReviewGenerationTask;
+using TheBoys.Application.Generations.Queries;
 using TheBoys.Application.Printing;
 using TheBoys.Domain.Entities;
 using TheBoys.Domain.Enums;
-using TheBoys.Infrastructure.Persistence;
 using TheBoys.WebApi.Security;
 
 namespace TheBoys.WebApi.Controllers;
@@ -33,8 +35,7 @@ public sealed class RecoverGenerationRequest
 }
 
 [ApiController, Route("api/generations"), Authorize]
-public sealed class GenerationsController(ApplicationDbContext db, IModelGenerationProvider provider, IModelStorage storage,
-    PrintPricingService pricing, IOptions<PrintPricingOptions> pricingOptions) : ApiControllerBase
+public sealed class GenerationsController(ISender mediator, IModelStorage storage) : ApiControllerBase
 {
     [HttpPost("image"), EnableRateLimiting("generation")]
     [RequestSizeLimit(17 * 1024 * 1024), RequestFormLimits(MultipartBodyLengthLimit = 17 * 1024 * 1024)]
@@ -50,60 +51,46 @@ public sealed class GenerationsController(ApplicationDbContext db, IModelGenerat
         if (mime == null) return BadRequest(new { message = "Chỉ nhận nội dung PNG, JPEG hoặc WEBP hợp lệ." });
         var fingerprint = Convert.ToHexString(SHA256.HashData(data.Concat(Encoding.UTF8.GetBytes($"|{request.HeightMm}|{request.ShouldTexture}|{request.ModelName}")).ToArray()));
         var key = requestGuid.ToString("N");
-        var previous = await db.GenerationTasks.AsNoTracking().SingleOrDefaultAsync(x => x.UserId == UserId && x.ClientRequestId == key, ct);
-        if (previous != null)
-            return previous.RequestFingerprint == fingerprint ? Ok(View(previous)) : Conflict(new { message = "Idempotency-Key đã dùng cho nội dung khác." });
-        if (!provider.IsConfigured) return StatusCode(503, new { message = "Chưa cấu hình AiProviders__Meshy__ApiKey trên server." });
-        var user = await db.Users.SingleAsync(x => x.Id == UserId, ct);
-        if (!user.HasAvailableCredit()) return StatusCode(402, new { message = "Bạn đã hết lượt tạo model." });
-        var task = new GenerationTask
-        {
-            UserId = UserId, TaskType = TaskType.ImageTo3D, RequestedHeightMm = request.HeightMm,
-            ShouldTexture = request.ShouldTexture, ModelName = request.ModelName?.Trim(),
-            ClientRequestId = key, RequestFingerprint = fingerprint, AiModel = provider.Model,
-            Provider = provider.Name,
-            ChargedPurchasedCredit = user.DeductCredit(), NextPollAtUtc = DateTime.UtcNow
-        };
-        task.InputImageUrl = await storage.SaveImageAsync(task.Id, data, mime, ct);
-        db.GenerationTasks.Add(task);
-        try { await db.SaveChangesAsync(ct); }
-        catch { System.IO.File.Delete(storage.ResolvePath(task.InputImageUrl)); throw; }
-        return AcceptedAtAction(nameof(Get), new { id = task.Id }, View(task));
+
+        var command = new CreateGenerationTaskCommand(UserId, data, mime, request.HeightMm, request.ShouldTexture, request.ModelName, key, fingerprint);
+        var result = await mediator.Send(command, ct);
+
+        if (result.IsFailure) return ProblemResult(result.Error);
+
+        var (task, isReplay) = result.Value;
+        return isReplay
+            ? Ok(View(task))
+            : AcceptedAtAction(nameof(Get), new { id = task.Id }, View(task));
     }
 
     [HttpGet]
     public async Task<IActionResult> List([FromQuery, Range(1, 100000)] int page = 1, CancellationToken ct = default)
     {
-        var query = db.GenerationTasks.AsNoTracking();
-        if (!IsManagement) query = query.Where(x => x.UserId == UserId);
-        var tasks = await query.OrderByDescending(x => x.CreatedAtUtc).Skip((page - 1) * 20).Take(20).ToListAsync(ct);
+        var tasks = await mediator.Send(new GetGenerationTasksQuery(UserId, IsManagement, page), ct);
         return Ok(tasks.Select(View));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
-        var task = await db.GenerationTasks.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
-        return task == null || !CanAccess(task.UserId) ? NotFound() : Ok(View(task));
+        var result = await mediator.Send(new GetGenerationTaskByIdQuery(id, UserId, IsManagement), ct);
+        return result.IsFailure ? ProblemResult(result.Error) : Ok(View(result.Value));
     }
 
     [HttpGet("{id:guid}/quote")]
     public async Task<IActionResult> Quote(Guid id, [FromQuery] Guid packageId, [FromQuery] int quantity = 1, CancellationToken ct = default)
     {
-        var task = await db.GenerationTasks.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
-        if (task == null || !CanAccess(task.UserId)) return NotFound();
-        var package = await db.PricingPackages.AsNoTracking().SingleOrDefaultAsync(x => x.Id == packageId, ct);
-        if (package == null) return NotFound(new { message = "Không tìm thấy gói in." });
-        try { return Ok(pricing.Quote(task, package, quantity, pricingOptions.Value)); }
-        catch (ArgumentException ex) { return BadRequest(new { message = ex.Message }); }
-        catch (InvalidOperationException ex) { return Conflict(new { message = ex.Message }); }
+        var result = await mediator.Send(new GetPrintQuoteQuery(id, packageId, quantity, UserId, IsManagement), ct);
+        return result.IsFailure ? ProblemResult(result.Error) : Ok(result.Value);
     }
 
     [HttpGet("{id:guid}/files/{kind}")]
     public async Task<IActionResult> Download(Guid id, string kind, CancellationToken ct)
     {
-        var task = await db.GenerationTasks.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
-        if (task == null || !CanAccess(task.UserId)) return NotFound();
+        var result = await mediator.Send(new GetGenerationTaskByIdQuery(id, UserId, IsManagement), ct);
+        if (result.IsFailure) return NotFound();
+        var task = result.Value;
+
         // STL is available after dimensional verification; staff approval is still required to print an order.
         var key = kind switch
         {
@@ -121,34 +108,15 @@ public sealed class GenerationsController(ApplicationDbContext db, IModelGenerat
     [HttpPost("{id:guid}/review"), Authorize(Roles = Roles.Management)]
     public async Task<IActionResult> Review(Guid id, PrintReviewRequest request, CancellationToken ct)
     {
-        var task = await db.GenerationTasks.SingleOrDefaultAsync(x => x.Id == id, ct);
-        if (task == null) return NotFound();
-        if (task.Status != GenerationStatus.Succeeded) return Conflict(new { message = "Model chưa hoàn tất." });
-        if (request.Approved && (!task.IsWatertight || task.PrintabilityStatus is not ("healthy" or "warning") || task.StoragePathStl == null))
-            return Conflict(new { message = "Model chưa đạt kiểm tra mesh/độ dày. Cần sửa file hoặc tạo mẫu khác trước khi duyệt." });
-        if (string.IsNullOrWhiteSpace(request.Note)) return BadRequest();
-        task.IsApprovedForPrinting = request.Approved;
-        task.ReviewStatus = request.Approved ? PrintReviewStatus.Approved : PrintReviewStatus.Rejected;
-        task.ReviewedByUserId = UserId; task.ReviewedAtUtc = DateTime.UtcNow; task.ReviewNote = request.Note.Trim();
-        await db.SaveChangesAsync(ct);
-        return Ok(View(task));
+        var result = await mediator.Send(new ReviewGenerationTaskCommand(id, UserId, request.Approved, request.Note), ct);
+        return result.IsFailure ? ProblemResult(result.Error) : Ok(View(result.Value));
     }
 
     [HttpPost("{id:guid}/recover"), Authorize(Roles = Roles.Management)]
     public async Task<IActionResult> Recover(Guid id, RecoverGenerationRequest request, CancellationToken ct)
     {
-        var task = await db.GenerationTasks.SingleOrDefaultAsync(x => x.Id == id, ct);
-        if (task == null) return NotFound();
-        if (task.Status != GenerationStatus.NeedsAttention) return Conflict(new { message = "Chỉ đối soát task đang cần can thiệp." });
-        var providerId = string.IsNullOrWhiteSpace(request.ProviderTaskId) ? task.ProviderId() : request.ProviderTaskId;
-        if (string.IsNullOrWhiteSpace(providerId)) return BadRequest(new { message = $"Cần task ID của đúng bước hiện tại từ {provider.Name}." });
-        try { await provider.GetAsync(task.Stage, providerId, ct); }
-        catch (ProviderException ex) { return StatusCode(502, new { message = ex.Message }); }
-        task.SetProviderId(providerId); task.SubmissionPending = false; task.ErrorMessage = null;
-        task.Status = task.Stage == GenerationStage.Generate ? GenerationStatus.Processing : GenerationStatus.MeshOptimizing;
-        task.NextPollAtUtc = DateTime.UtcNow;
-        await db.SaveChangesAsync(ct);
-        return Ok(View(task));
+        var result = await mediator.Send(new RecoverGenerationTaskCommand(id, request.ProviderTaskId), ct);
+        return result.IsFailure ? ProblemResult(result.Error) : Ok(View(result.Value));
     }
 
     private object View(GenerationTask t) => new

@@ -5,11 +5,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using TheBoys.Application;
+using TheBoys.Application.Common.Interfaces;
 using TheBoys.Domain.Entities;
 using TheBoys.Infrastructure;
 using TheBoys.Infrastructure.Persistence;
@@ -29,6 +31,13 @@ builder.Services.AddOpenApi();
 builder.Services.AddProblemDetails();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddSingleton<TokenService>();
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 var jwt = builder.Configuration.GetSection("JwtSettings").Get<JwtOptions>() ?? new();
 if (string.IsNullOrEmpty(jwt.Secret) && builder.Environment.IsDevelopment())
@@ -51,12 +60,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
         OnTokenValidated = async context =>
         {
             if (!Guid.TryParse(context.Principal?.FindFirstValue("sub"), out var id)) { context.Fail("Invalid subject"); return; }
-            var db = context.HttpContext.RequestServices.GetRequiredService<ApplicationDbContext>();
-            var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, context.HttpContext.RequestAborted);
-            if (user == null || Roles.Name(user.Role) == "disabled") { context.Fail("Account unavailable"); return; }
+            var userRoleCache = context.HttpContext.RequestServices.GetRequiredService<IUserRoleCache>();
+            var cachedRole = userRoleCache.Get(id);
+            if (cachedRole == null)
+            {
+                var db = context.HttpContext.RequestServices.GetRequiredService<IApplicationDbContext>();
+                var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, context.HttpContext.RequestAborted);
+                if (user == null || Roles.Name(user.Role) == "disabled") { context.Fail("Account unavailable"); return; }
+                cachedRole = Roles.Name(user.Role);
+                userRoleCache.Set(id, cachedRole, TimeSpan.FromSeconds(60));
+            }
+            else if (cachedRole == "disabled")
+            {
+                context.Fail("Account unavailable");
+                return;
+            }
             var identity = (ClaimsIdentity)context.Principal!.Identity!;
             foreach (var claim in identity.FindAll("role").ToList()) identity.RemoveClaim(claim);
-            identity.AddClaim(new Claim("role", Roles.Name(user.Role)));
+            identity.AddClaim(new Claim("role", cachedRole));
         }
     };
 });
@@ -67,13 +88,22 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddPolicy("auth", context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new() { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("auth", context =>
+    {
+        var clientIp = context.Request.Headers["CF-Connecting-IP"].FirstOrDefault()
+            ?? context.Request.Headers["X-Real-IP"].FirstOrDefault()
+            ?? context.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            clientIp, _ => new() { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
+    });
     options.AddPolicy("generation", context => RateLimitPartition.GetFixedWindowLimiter(
         context.User.FindFirstValue("sub") ?? "anonymous", _ => new() { PermitLimit = 5, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 
 var app = builder.Build();
+app.UseForwardedHeaders();
+
 if (args.Contains("--initialize-database"))
 {
     await DatabaseInitializer.InitializeAsync(app.Services, app.Configuration);
