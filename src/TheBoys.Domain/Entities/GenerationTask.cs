@@ -1,0 +1,38 @@
+using TheBoys.Domain.Common;
+using TheBoys.Domain.Enums;
+
+namespace TheBoys.Domain.Entities;
+
+public sealed class GenerationTask : BaseAuditableEntity
+{
+    public Guid UserId { get; set; }
+    public TaskType TaskType { get; set; }
+    public string? Prompt { get; set; }
+    public string? ArtStyle { get; set; }
+    public string? InputImageUrl { get; set; }
+    public string? CleanedImageUrl { get; set; }
+    public GenerationStatus Status { get; set; } = GenerationStatus.Queued;
+    public string? ProviderTaskId { get; set; }
+    public string? ErrorMessage { get; set; }
+    public int RetryCount { get; set; }
+    public int? DurationSeconds { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
+
+    // Gộp từ ModelAssets: Thông số hình học 3D & đường dẫn file
+    public string? ModelName { get; set; }
+    public string? StoragePathGlb { get; set; }
+    public string? StoragePathStl { get; set; }
+    public string? ThumbnailUrl { get; set; }
+    public int? Polycount { get; set; }
+    public int? VertexCount { get; set; }
+    public bool IsWatertight { get; set; }
+    public decimal? MinWallThicknessMm { get; set; }
+    public decimal? BoundingBoxX_Mm { get; set; }
+    public decimal? BoundingBoxY_Mm { get; set; }
+    public decimal? BoundingBoxZ_Mm { get; set; }
+    public decimal? EstimatedVolumeCm3 { get; set; }
+    public bool IsApprovedForPrinting { get; set; }
+
+    // Navigation
+    public User User { get; set; } = default!;
+}

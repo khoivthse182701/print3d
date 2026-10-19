@@ -1,0 +1,306 @@
+CP3 — THE BOYS
+NỀN TẢNG WEBSITE/APP SÁNG TẠO MÔ HÌNH 3D BẰNG AI VÀ ĐẶT THÀNH PHẨM CÁ NHÂN HÓA
+Phạm vi thử nghiệm: TP.HCM. Bản cập nhật ngày 18/10/2026.
+
+TÓM TẮT NHANH CP2
+
+THE BOYS là dự án website/app giúp người dùng chuyển ý tưởng thành mô hình 3D bằng AI thông qua mô tả văn bản (Text-to-3D) hoặc hình ảnh đầu vào (Image-to-3D). Người dùng xem trước mô hình trên nền tảng và có thể tiếp tục đặt chuyển mô hình số thành vật phẩm cá nhân hóa.
+
+THE BOYS phát triển và vận hành nền tảng, thiết kế trải nghiệm khách hàng, tích hợp công nghệ AI, quản lý đơn hàng và điều phối đối tác. Đối tác in 3D bên thứ ba đảm nhận công đoạn sản xuất vật lý theo tiêu chuẩn và phạm vi dịch vụ được hai bên thống nhất.
+
+Khách hàng ưu tiên tại TP.HCM gồm người đi làm trẻ, sinh viên và các nhóm có nhu cầu quà tặng cá nhân hóa, vật phẩm kỷ niệm và trang trí. Hướng mở rộng là đơn nhóm, studio kỷ yếu và doanh nghiệp.
+
+CP2 đề xuất mức giá 250.000–450.000 đồng/sản phẩm, mốc bình quân 300.000 đồng và mục tiêu 1.000–1.500 đơn năm đầu. CP3 kế thừa mục tiêu này để kiểm chứng tính khả thi, không coi đây là doanh số đã đạt được.
+
+Thông điệp giá trị: “Từ ý tưởng của bạn đến mô hình 3D mang dấu ấn riêng.”
+
+PHẠM VI VÀ NGUYÊN TẮC LẬP MÔ HÌNH
+
+1. Sản phẩm cốt lõi là trải nghiệm sáng tạo và đặt thành phẩm trên một nền tảng; không định vị THE BOYS là xưởng in tự vận hành.
+2. Khách hàng được tiếp cận qua gói dịch vụ và quyền lợi, thay vì một danh sách phụ phí. Tổng giá và phạm vi bao gồm được thể hiện trước khi thanh toán; các nâng cấp do khách chủ động lựa chọn.
+3. P&L vẫn phân tách đủ doanh thu, chi phí AI, khoản trả đối tác, bán hàng và vận hành. “Đã bao gồm tạo mẫu AI” không có nghĩa chi phí AI bằng không.
+4. P&L giả định THE BOYS bán và thu tiền toàn bộ gói dịch vụ, đồng thời trả tiền sản xuất cho đối tác. Trường hợp khách ký và thanh toán trực tiếp với xưởng, chỉ trả THE BOYS một phần dịch vụ số, cần lập mô hình dòng tiền và doanh thu khác.
+5. Để tính toán, giả định đối tác nhận gói in, hoàn thiện cơ bản và đóng gói. Đây là cấu hình hợp tác đề xuất, chưa phải thông tin hợp đồng đã được xác nhận.
+6. Thử nghiệm tập trung khu vực đô thị TP.HCM. Các số liệu năm 2024 giữ nguyên phạm vi thống kê tại thời điểm công bố, không dùng để suy rộng địa giới hiện tại.
+
+PHẦN 1 — BUSINESS MODEL CANVAS
+
+1. CUSTOMER SEGMENTS — PHÂN KHÚC KHÁCH HÀNG
+
+Ưu tiên 1: người đi làm trẻ khoảng 22–29 tuổi tại TP.HCM, muốn quà sinh nhật, quà kỷ niệm hoặc vật phẩm trang trí thể hiện dấu ấn cá nhân. Họ cần thao tác đơn giản, xem trước hình dáng và biết tổng giá; khó khăn là không có kỹ năng dựng 3D và phải tìm nhiều bên thiết kế, in, giao hàng.
+
+Ưu tiên 2: sinh viên, nhóm bạn và tập thể tốt nghiệp tại TP.HCM. Nhu cầu là lưu giữ kỷ niệm, tạo vật phẩm theo ảnh và đặt theo nhóm. Họ nhạy cảm về giá, cần mẫu nhất quán và giao đúng dịp.
+
+Ưu tiên 3: studio kỷ yếu, đơn vị sự kiện và doanh nghiệp đặt quà thương hiệu, linh vật hoặc vật phẩm vinh danh. Họ cần đơn vị điều phối đáng tin cậy, duyệt mẫu rõ ràng và chất lượng đồng đều.
+
+Giai đoạn đầu tập trung B2C và nhóm nhỏ. B2B mở rộng sau khi kiểm chứng khả năng cung ứng. Người dùng chỉ muốn tạo model số cũng có thể sử dụng nền tảng, nhưng doanh thu dịch vụ số được kiểm chứng riêng, chưa cộng vào P&L cơ sở.
+
+2. VALUE PROPOSITIONS — GIÁ TRỊ ĐỀ XUẤT
+
+THE BOYS giúp khách hàng hiện thực hóa ý tưởng thành mô hình 3D cá nhân hóa mà không phải tự học phần mềm chuyên nghiệp hoặc tự điều phối nhiều nhà cung cấp.
+
+Giá trị cốt lõi:
+- Sáng tạo dễ tiếp cận: nhập mô tả hoặc tải ảnh để AI hỗ trợ tạo hình.
+- Xem trước và lựa chọn: xem mô hình 3D, duyệt mẫu, chọn phiên bản thành phẩm trước khi đặt.
+- Một hành trình liền mạch: tạo mẫu, đặt sản xuất, theo dõi và nhận hỗ trợ tại cùng một nền tảng.
+- Cá nhân hóa: biến hình ảnh, ý tưởng hoặc kỷ niệm thành vật phẩm có dấu ấn riêng.
+- Giá gói rõ ràng: mô tả quyền lợi, số lượt tạo và phạm vi hoàn thiện được bao gồm.
+
+THE BOYS sử dụng cách đóng gói giá trị như “gói thành phẩm đã bao gồm tạo mẫu AI”, “phiên bản cá nhân hóa”, “gói kỷ niệm nhóm”. Không gọi là miễn phí không giới hạn khi thực tế có hạn mức hoặc điều kiện.
+
+Chỉ tiêu kiểm chứng: thời gian xuất bản xem trước, số lần chỉnh sửa, tỷ lệ mẫu có thể in, tỷ lệ giao đúng hẹn, tỷ lệ phải làm lại và mức hài lòng. Thời gian AI tạo bản xem trước được tách khỏi thời gian kiểm tra và sản xuất; chưa cam kết giao 48 giờ khi đối tác chưa xác nhận.
+
+3. CHANNELS — KÊNH PHÂN PHỐI VÀ TRUYỀN THÔNG
+
+- Website/app: tiếp nhận text/ảnh, tạo model, xem trước, chọn gói, thanh toán và theo dõi đơn. Giai đoạn MVP ưu tiên web app dùng được trên điện thoại; app riêng phát triển theo nhu cầu và nguồn lực.
+- TikTok, Instagram, Facebook: video biến ý tưởng thành model và thành phẩm, câu chuyện quà tặng, trải nghiệm khách hàng.
+- Zalo và tư vấn trực tiếp: hỗ trợ khách B2C, nhóm lớp và doanh nghiệp.
+- Studio kỷ yếu, câu lạc bộ và cộng đồng sáng tạo tại TP.HCM: tiếp cận khách phù hợp và đơn nhóm.
+- Sự kiện trải nghiệm: demo trên thiết bị, cho người tham dự thử sáng tạo; không giả định có máy in tại booth.
+
+P&L cơ sở chỉ tính bán trực tiếp qua nền tảng. Phí sàn, chi phí booth, hoa hồng giới thiệu và quảng bá qua đối tác nếu có phải được bổ sung theo từng chiến dịch.
+
+4. CUSTOMER RELATIONSHIPS — QUAN HỆ KHÁCH HÀNG
+
+Mô hình kết hợp tự phục vụ và hỗ trợ: khách tự tạo, xem, chọn; THE BOYS tư vấn và điều phối xử lý khi mẫu hoặc sản phẩm có vấn đề.
+
+Freemium/Experience-first: người dùng được trải nghiệm số lượt tạo giới hạn, sau đó chọn gói thành phẩm hoặc nâng cấp sáng tạo. Hai lượt miễn phí là giả định thiết kế sản phẩm dùng trong P&L, chưa phải chính sách đã chốt. Cần kiểm soát tài khoản, số lượt và ngân sách để tránh chi phí vượt mức.
+
+Giữ chân qua thư viện mẫu, đặt lại thiết kế đã duyệt, quyền lợi thành viên, ưu đãi theo nhóm và hỗ trợ đúng hẹn. Không giả định khách hàng sẽ mua lặp lại nếu chưa có dữ liệu. Ảnh cá nhân và mẫu của khách chỉ được sử dụng cho mục đích, quyền hạn đã được khách đồng ý.
+
+5. REVENUE STREAMS — DÒNG DOANH THU
+
+Định giá theo giá trị và đóng gói dịch vụ (Value-based Pricing, Bundled Pricing). Mức sẵn sàng chi trả vẫn phải được thử nghiệm với sản phẩm cụ thể.
+
+Nguồn 1 — Gói thành phẩm cá nhân hóa: nguồn thu chính từ gói kết hợp tạo mẫu AI, xem trước, kiểm tra khả năng sản xuất, in qua đối tác, hoàn thiện cơ bản và đóng gói theo cấu hình đã công bố.
+
+Nguồn 2 — Nâng cấp sáng tạo: lượt tạo bổ sung, tùy chọn mẫu hoặc xuất file theo quyền sử dụng của gói. Tên gọi khách hàng là “gói sáng tạo nâng cao”; nội bộ vẫn tính chi phí mỗi lượt và hiệu quả từng gói.
+
+Nguồn 3 — Gói nhóm và doanh nghiệp: bộ quà tốt nghiệp, quà sự kiện, linh vật thương hiệu, phiên bản theo tập thể. Báo giá dựa trên số lượng, độ phức tạp và tiến độ.
+
+P&L cơ sở chỉ tính nguồn 1. Không tự cộng doanh thu token, xuất file, B2B hoặc phí thành viên khi chưa có cơ sở về số người trả tiền và giá bán.
+
+Hai mức giá phân tích: 300.000 đồng để đối chiếu mốc CP2; 390.000 đồng để thử nghiệm gói thành phẩm tiêu chuẩn. Đây là hai mức thử cho cùng cấu hình mẫu nhằm đo tác động của giá, không phải hai phiên bản chất lượng đã được xác lập.
+
+Điều khoản đề xuất: khách duyệt mẫu và thanh toán trước sản xuất; đơn nhóm/B2B có lịch thanh toán theo thỏa thuận. Giá hiển thị là tổng tiền của gói đã chọn, thông tin giao hàng và nâng cấp được công bố trước thanh toán. Mô hình chỉ tính sản phẩm giao thành công; tiền đặt trước được theo dõi riêng.
+
+Động lực doanh thu: lượng truy cập phù hợp, tỷ lệ kích hoạt, chuyển đổi thực trả, giá bán thuần, số sản phẩm/đơn và tỷ lệ giao thành công. Phần chênh giữa giá bán và tiền trả xưởng chưa phải lợi nhuận cuối vì còn AI, vận hành, marketing và xử lý lỗi.
+
+6. KEY RESOURCES — NGUỒN LỰC CHÍNH
+
+- Công nghệ: web/app, backend, tích hợp API AI, 3D viewer, quản lý tài khoản, lượt tạo, đơn hàng và đối soát.
+- Trí tuệ: thương hiệu THE BOYS, giao diện và mã nguồn do nhóm sở hữu, quy trình dịch vụ, mẫu có quyền sử dụng. API AI của bên khác không được coi là công nghệ độc quyền do nhóm phát triển.
+- Vật chất: máy tính và điện thoại sẵn có phục vụ phát triển, kiểm thử và trình diễn. P&L vận hành giai đoạn thử nghiệm không giả định mua máy in hay thuê xưởng.
+- Đội ngũ: công nghệ; kinh doanh/marketing; điều phối đối tác/chăm sóc khách hàng. Đây là ba nhóm trách nhiệm, chưa khẳng định số thành viên thực tế.
+- Mạng lưới cung ứng: đối tác in có tiêu chuẩn chất lượng, thời gian xử lý và cách giải quyết lỗi rõ ràng.
+
+7. KEY ACTIVITIES — HOẠT ĐỘNG CHÍNH
+
+- Phát triển và duy trì nền tảng, tích hợp AI, tối ưu trải nghiệm và bảo mật dữ liệu.
+- Quản lý hạn mức dùng thử, theo dõi chi phí API và xử lý yêu cầu tạo lỗi.
+- Tiếp nhận yêu cầu, chuyển file cho đối tác kiểm tra, hỗ trợ khách duyệt mẫu và báo tổng giá.
+- Phân công đơn, theo dõi tiến độ, đối soát đối tác và phối hợp giao nhận.
+- Xây dựng nội dung, thử nghiệm giá, tiếp cận cộng đồng và bán gói nhóm.
+- Chăm sóc khách hàng, phối hợp làm lại hoặc xử lý sự cố theo chính sách đã công bố.
+- Phân tích hiệu quả từng đơn và từng kênh.
+
+Việc vận hành máy, xử lý vật liệu, hậu kỳ và đóng gói được tính vào phạm vi đối tác trong cấu hình tài chính đề xuất. THE BOYS giám sát chất lượng qua mẫu nghiệm thu, thông tin/ảnh kiểm tra và phản hồi; không mặc định tự thực hiện các công đoạn này.
+
+8. KEY PARTNERS — ĐỐI TÁC CHÍNH
+
+- Đối tác in 3D: kiểm tra khả năng in, sản xuất và thực hiện phần hoàn thiện/đóng gói đã thỏa thuận.
+- Nhà cung cấp AI: Text-to-3D, Image-to-3D và công cụ liên quan theo cấu hình tích hợp.
+- Cloud, lưu trữ, thanh toán: hạ tầng nền tảng và giao dịch.
+- Giao vận tại TP.HCM: vận chuyển từ đối tác hoặc điểm bàn giao đến khách.
+- Studio kỷ yếu, đơn vị sự kiện, cộng đồng sinh viên/sáng tạo: kênh tiếp cận và hợp tác gói nhóm.
+
+Thỏa thuận đối tác cần xác định: cấu hình mẫu, những gì giá đã bao gồm, điều kiện làm lại, tiến độ, bảo mật file, giao nhận và thanh toán. Các doanh nghiệp xuất hiện trong phần nguồn là đơn vị tham khảo, chưa phải đối tác đã ký hợp đồng.
+
+9. COST STRUCTURE — CƠ CẤU CHI PHÍ
+
+Chi phí theo gói bán: tiền trả đối tác sản xuất; AI bổ sung và xử lý số; ngân sách xử lý lỗi mà THE BOYS còn phải chịu; hỗ trợ vận chuyển; thanh toán.
+
+Chi phí thu hút khách: marketing và AI dùng thử của cả người mua lẫn không mua. Cần theo dõi tổng ngân sách này trên số đơn thành công.
+
+Chi phí cố định: phụ cấp nhóm, cloud/internet cơ bản, phần mềm và bảo trì. Không tự thêm máy in, nguyên liệu, điện máy, công hậu kỳ hoặc thuê xưởng nếu đã nằm trong giá đối tác.
+
+Lợi thế quy mô có thể đến từ giá hợp đồng theo lô, tái sử dụng mẫu và giảm công hỗ trợ mỗi đơn. Mô hình không mặc định được giảm giá theo sản lượng khi chưa có thỏa thuận. Chi phí phát triển nền tảng trước khi bán hàng cần lập ngân sách riêng; không coi là bằng không chỉ vì nhóm tự thực hiện.
+
+PHẦN 2 — P&L THEO 5 BƯỚC
+
+A. GIẢ ĐỊNH VÀ CƠ SỞ DOANH THU
+
+Phạm vi: dự phóng vận hành thử nghiệm tại TP.HCM. Đơn vị: VND. Một đơn giao thành công tương ứng một sản phẩm. Chỉ tính gói thành phẩm; chưa tính dịch vụ số riêng, B2B hoặc bán token.
+
+Phễu bình quân tháng:
+- 2.500 lượt truy cập phù hợp — mục tiêu nội bộ.
+- 20% kích hoạt tạo mẫu = 500 người dùng thử — giả định.
+- 25% chuyển đổi từ người dùng thử thành đơn giao thành công = 125 đơn — giả định.
+- Bình quân 125 đơn/tháng, tương ứng 1.500 sản phẩm/năm — mục tiêu kế thừa CP2.
+
+Các con số phễu chưa có dữ liệu thực nghiệm của nhóm. Không dùng các tỷ lệ khảo sát CP2 như 68% “sẵn sàng thử” làm tỷ lệ mua. Không có bài báo nào chứng minh riêng THE BOYS chắc chắn đạt 125 đơn/tháng.
+
+Giả định giá bán và chi phí trên cùng cơ sở thuần cho mô hình quản trị trước thuế. Chưa mô phỏng VAT, thuế thu nhập, lãi vay, chi phí phát triển trước vận hành và tiền công đầy đủ theo thị trường của nhóm sáng lập.
+
+BƯỚC 1. DOANH THU
+
+Phương án đối chiếu CP2: 125 × 300.000 = 37.500.000 đồng/tháng; 450.000.000 đồng/năm.
+Phương án thử nghiệm giá: 125 × 390.000 = 48.750.000 đồng/tháng; 585.000.000 đồng/năm.
+
+Hai phép tính giữ cùng sản lượng để so tác động của giá. Thực tế tăng giá có thể giảm chuyển đổi; cần đo thay vì mặc định doanh số không đổi.
+
+BƯỚC 2. GIÁ VỐN
+
+Giả định đối tác cung cấp trọn gói sản xuất, hoàn thiện cơ bản và đóng gói với ngân sách 120.000 đồng/sản phẩm. Đây là giả định thương lượng, chưa phải báo giá thị trường được xác nhận. Không suy ra giá này chỉ từ bảng giá in theo gram.
+
+Các cấu phần nội bộ trên một đơn:
+1. Gói đối tác sản xuất: 120.000 đồng.
+2. AI bổ sung cho đơn bán: 1 lượt × 10.000 = 10.000 đồng.
+3. Ngân sách xử lý lỗi còn dự án chịu: 5% đơn × 120.000 = 6.000 đồng. Giả định mỗi đơn thuộc nhóm này phát sinh thêm một gói sản xuất; chưa gồm lỗi lặp lại. Nếu đối tác chịu bảo hành thì cần điều chỉnh để không tính trùng.
+Tổng COGS đơn vị = 136.000 đồng.
+
+COGS tháng = 125 × 136.000 = 17.000.000 đồng.
+
+Khách hàng nhận giá gói; không cần thấy khoản 120.000 đồng trả đối tác. Phần tài chính nội bộ vẫn ghi rõ khoản này. Mô hình không tính công hậu kỳ, bao bì và vật tư của xưởng thêm lần nữa.
+
+BƯỚC 3. LỢI NHUẬN GỘP
+
+Giá 300.000: 37.500.000 − 17.000.000 = 20.500.000 đồng/tháng; biên gộp 54,67%.
+Giá 390.000: 48.750.000 − 17.000.000 = 31.750.000 đồng/tháng; biên gộp 65,13%.
+
+BƯỚC 4. CHI PHÍ VẬN HÀNH
+
+AI dùng thử: 500 người × 2 lượt × 10.000 = 10.000.000 đồng/tháng.
+10.000 đồng/lượt là ngân sách tạm, không phải giá API đã được kiểm chứng của Meshy. Phải thay bằng tiền mua API thực tế, tỷ giá, cấu hình và số lượt phát sinh. Một lượt ở đây là đơn vị ngân sách; không khẳng định một request API tạo được file in hoàn chỉnh.
+
+Chi phí cố định/tháng:
+- Phụ cấp nhóm giai đoạn thử nghiệm: 8.000.000 đồng; phân bổ minh họa công nghệ 3 triệu, marketing 3 triệu, điều phối/CSKH 2 triệu.
+- Cloud cơ bản, internet và tiện ích nền tảng: 1.500.000 đồng; không gồm API AI đã tính riêng.
+- Marketing: 3.500.000 đồng.
+- Phần mềm, sao lưu và bảo trì thường xuyên: 500.000 đồng; không trùng cloud hoặc API AI.
+Tổng cố định = 13.500.000 đồng/tháng.
+
+Không thuê văn phòng/xưởng riêng ở giai đoạn thử nghiệm; dùng thiết bị hiện có. Đây là giả định vận hành, không áp dụng nếu nhóm thực tế phải trả thêm tiền thuê, mua máy tính hoặc thuê lập trình viên. Phụ cấp chưa phải lương thị trường đầy đủ.
+
+Chi phí biến đổi ngoài COGS:
+- AI dùng thử: 10.000.000 đồng.
+- Hỗ trợ vận chuyển: 125 × 10.000 = 1.250.000 đồng. Phần còn lại giả định khách trả trực tiếp cho đơn vị giao hàng, được thông báo trước.
+- Phí thu tiền dự toán: 1% doanh thu = 375.000 đồng ở giá 300.000, hoặc 487.500 đồng ở giá 390.000. Không coi đây là biểu phí nhà cung cấp được xác minh.
+
+Tổng chi phí vận hành:
+- Giá 300.000: 13.500.000 + 10.000.000 + 1.250.000 + 375.000 = 25.125.000 đồng/tháng.
+- Giá 390.000: 13.500.000 + 10.000.000 + 1.250.000 + 487.500 = 25.237.500 đồng/tháng.
+
+BƯỚC 5. LỢI NHUẬN TRƯỚC THUẾ
+
+Chỉ tiêu | Giá 300.000 | Giá 390.000
+Doanh thu/tháng | 37.500.000 | 48.750.000
+COGS/tháng | 17.000.000 | 17.000.000
+Lợi nhuận gộp/tháng | 20.500.000 | 31.750.000
+Chi phí vận hành/tháng | 25.125.000 | 25.237.500
+Lợi nhuận trước thuế/tháng | -4.625.000 | 6.512.500
+Biên lợi nhuận trước thuế | -12,33% | 13,36%
+Doanh thu/năm | 450.000.000 | 585.000.000
+Lợi nhuận trước thuế/năm | -55.500.000 | 78.150.000
+
+Số năm giả định đạt 1.500 đơn và cùng giá, chi phí đơn vị, chi phí cố định trong đủ 12 tháng. Lợi nhuận trước thuế chưa phải tiền mặt sẵn để chia và chưa thể hiện khả năng hoàn vốn đầu tư phát triển nền tảng.
+
+PHẦN 3 — HÒA VỐN VÀ KIỂM TRA GIẢ ĐỊNH
+
+1. Hòa vốn
+
+Với 25% chuyển đổi, chi phí AI dùng thử trên một đơn bán = 2 × 10.000 / 25% = 80.000 đồng.
+Lãi góp/đơn = P − 136.000 − 80.000 − 10.000 − 1% × P.
+
+Giá 300.000: lãi góp 71.000 đồng; hòa vốn = làm tròn lên(13.500.000 / 71.000) = 191 đơn/tháng, doanh thu 57.300.000 đồng.
+Giá 390.000: lãi góp 160.100 đồng; hòa vốn = làm tròn lên(13.500.000 / 160.100) = 85 đơn/tháng, doanh thu 33.150.000 đồng.
+
+Các điểm hòa vốn giữ nguyên giá đối tác, tỷ lệ chuyển đổi và chi phí cố định. Không áp dụng nếu tăng quy mô đòi hỏi tăng nhân sự hoặc marketing.
+
+Giá hòa vốn ở 125 đơn/tháng = (136.000 + 80.000 + 10.000 + 13.500.000/125) / 0,99 = khoảng 337.374 đồng/đơn. Mức 390.000 tạo dư địa khoảng 52.626 đồng so với giá hòa vốn, theo bộ giả định này.
+
+2. Độ nhạy với giá đối tác
+
+Giữ giá bán 390.000, 125 đơn, cùng tỷ lệ lỗi và AI:
+Giá gói đối tác | Lợi nhuận trước thuế/tháng
+120.000 | 6.512.500
+140.000 | 3.887.500
+160.000 | 1.262.500
+180.000 | -1.362.500
+
+Biến động giá đối tác ảnh hưởng cả tiền sản xuất và ngân sách xử lý lỗi 5%. Ngưỡng giá đối tác hòa vốn khoảng 169.619 đồng/gói ở các giả định còn lại không đổi.
+
+3. Độ nhạy với chi phí AI
+
+Tổng ngân sách AI tính 1.000 lượt dùng thử + 125 lượt bổ sung cho đơn bán = 1.125 lượt/tháng.
+Giữ giá bán 390.000, 125 đơn:
+Chi phí/lượt | Tổng chi phí AI/tháng | Lợi nhuận trước thuế/tháng
+5.000 | 5.625.000 | 12.137.500
+10.000 | 11.250.000 | 6.512.500
+15.000 | 16.875.000 | 887.500
+
+Ngưỡng chi phí AI hòa vốn khoảng 15.789 đồng/lượt. Các lượt sửa file/API phụ trợ chưa nằm trong ngân sách thực tế cần cộng đủ khi đo thử.
+
+4. Độ nhạy với chuyển đổi
+
+Giữ mục tiêu 125 đơn và giá 390.000; thay đổi số người phải dùng thử để đạt mục tiêu:
+Chuyển đổi | Người kích hoạt cần có (bình quân) | AI dùng thử/tháng | LNTT/tháng
+10% | 1.250 | 25.000.000 | -8.487.500
+25% | 500 | 10.000.000 | 6.512.500
+40% | 312,5 | 6.250.000 | 10.262.500
+
+312,5 là giá trị kỳ vọng bình quân, tương đương khoảng 313 người. Bảng chỉ tách ảnh hưởng chuyển đổi và giữ marketing cố định; không khẳng định có thể tìm thêm người dùng mà không tăng ngân sách.
+
+5. Kế hoạch sản lượng và dòng tiền
+
+Lộ trình minh họa M1–M12: 50, 65, 80, 95, 110, 125, 140, 145, 155, 165, 180, 190 sản phẩm. Tổng 1.500 sản phẩm, chưa phải dự báo mùa vụ dựa trên dữ liệu thực tế.
+
+Ở giá 390.000: LNTT tháng = 160.100 × sản lượng − 13.500.000. Ba tháng đầu lần lượt -5.495.000, -3.093.500 và -692.000 đồng. Tháng 4 đạt 1.709.500 đồng theo giả định. Lỗ vận hành lũy kế lớn nhất sau ba tháng là 9.280.500 đồng.
+
+9.280.500 chỉ có thể dùng làm mức thiếu hụt tiền vận hành trong giả định thu/chi cùng tháng, không có vốn đầu tư, cọc, công nợ, thuế hoặc các khoản ngoài mô hình. Đây không phải toàn bộ vốn cần huy động. Nhóm cần lập ngân sách phát triển website/app, mẫu thử, ảnh sản phẩm và chi phí trước khai trương riêng. Báo cáo này thay thế các con số vốn 18 triệu/37,39 triệu của bản trước; không sử dụng lại chúng.
+
+6. Điều kiện để đánh giá dự án có thể có lãi
+
+- Kiểm chứng khách trả tiền ở mức 390.000 cho cấu hình sản phẩm đã mô tả, không chỉ bày tỏ quan tâm.
+- Lấy ít nhất ba báo giá cùng một file, làm rõ gói có in, hoàn thiện, đóng gói, thuế và giao hàng hay không.
+- Đo tổng chi phí AI trên số đơn giao thành công, bao gồm người không mua, lượt lỗi và xử lý lại.
+- Thử nghiệm mẫu thực tế, đối chiếu bản xem trước với thành phẩm và theo dõi lỗi.
+- Xác nhận năng lực cung ứng theo tháng với đối tác thay vì suy từ số máy hoặc giả định công suất nội bộ.
+- Nếu phải thuê đủ nhân sự theo thị trường, tính lại chi phí. Ví dụ quỹ nhân sự tăng từ 8 lên 18 triệu/tháng thì LNTT phương án 390.000 giảm từ 6.512.500 xuống -3.487.500 đồng.
+
+PHẦN 4 — NGUỒN DỮ LIỆU VÀ CÁCH SỬ DỤNG
+
+Các đường dẫn được kiểm tra ngày 18/10/2026. Bảng giá có thể thay đổi; không thay thế báo giá cho mẫu cụ thể.
+
+[S1] Tuổi Trẻ/Khoa học Phổ thông, 15/11/2024, “TP.HCM triển khai các giải pháp thu thuế liên quan thương mại điện tử”:
+https://tuoitre.vn/khoahocphothong/tp-hcm-trien-khai-cac-giai-phap-thu-thue-lien-quan-thuong-mai-dien-tu-104257804.htm
+Số liệu: doanh thu TMĐT TP.HCM trong 10 tháng đầu 2024 là 91.962 tỷ đồng, tăng 43,7%. Dùng làm bối cảnh giao dịch trực tuyến, không phải TAM quà tặng 3D, không nhân tỷ lệ thị phần cảm tính để ra doanh thu dự án.
+
+[S2] Tiệm 3D, “Giá In 3D Bao Nhiêu Tiền? Cách Tính Giá Và Bảng Giá Tham Khảo Tại TP.HCM”:
+https://tiem3d.com/blog/gia-in-3d-tinh-nhu-the-nao/
+Số liệu: figure resin 15 cm tham khảo 600.000–900.000 đồng; dựng mẫu tượng/nhân vật 800.000–2.500.000 đồng. Dùng đối chiếu phân khúc và độ phức tạp. Không khẳng định gói mini THE BOYS có cùng kích thước, công sơn hay chất lượng với mẫu tham chiếu.
+
+[S3] INKDEV, “In 3D Resin 16K”:
+https://inkdev.vn/dich-vu/in-3d-resin-16k-11.html
+Số liệu: resin tiêu chuẩn 3.500–5.000 đồng/gram. Dùng làm tham khảo khi đàm phán sản xuất. Không xác nhận giá trọn gói 120.000 đồng của P&L. Phải hỏi riêng phạm vi hậu kỳ, bao bì, tối thiểu đơn và giao hàng; không suy giá gói từ một mức đơn giá/gram.
+
+[S4] Meshy, “Pricing — API”:
+https://docs.meshy.ai/en/api/pricing
+Số liệu: Image-to-3D mesh-only trên Meshy-6/7.1 là 20 credits/request tại thời điểm kiểm tra. Các cấu hình, texture và công đoạn phụ có cách tính khác. Dùng chứng minh AI có chi phí theo sử dụng; không xác nhận mức 10.000 đồng/lượt trong P&L. Nhóm cần giá mua credits thực tế và kiểm thử pipeline.
+
+NHỮNG ĐẦU VÀO CHƯA CÓ NGUỒN THỰC NGHIỆM
+
+- Giá bán 300.000/390.000: giả định để thử nghiệm, không phải giá trung bình thị trường được xác nhận.
+- Phễu 2.500 → 500 → 125: mục tiêu nội bộ, chưa phải dữ liệu đo.
+- Giá đối tác 120.000: ngân sách dự kiến, cần báo giá.
+- AI 10.000/lượt, làm lại 5%, hỗ trợ ship 10.000 và phí thu tiền 1%: giả định ngân sách.
+- Phụ cấp 8 triệu, cloud/internet 1,5 triệu, marketing 3,5 triệu, phần mềm/bảo trì 0,5 triệu: kế hoạch chi nội bộ.
+- Tỷ lệ khảo sát trong CP2: chỉ đưa lại khi nhóm có dữ liệu gốc, số mẫu, cách chọn mẫu và thời gian thu thập.
+
+KẾT LUẬN ĐỀ XUẤT CHO CP3
+
+THE BOYS xây dựng nền tảng website/app giúp người dùng tạo model 3D bằng AI từ văn bản hoặc hình ảnh và đặt chuyển thành vật phẩm cá nhân hóa thông qua đối tác in 3D. Giá trị của dự án nằm ở trải nghiệm sáng tạo dễ tiếp cận, khả năng xem trước và một hành trình đặt hàng thuận tiện. Dự án tiếp cận khách bằng gói dịch vụ theo giá trị, đồng thời theo dõi đầy đủ chi phí bên trong. Phân tích cho thấy giá 300.000 đồng chưa đủ trang trải chi phí ở mức bình quân 125 đơn/tháng trong bộ giả định hiện tại. Giá thử nghiệm 390.000 đồng có thể đạt 6.512.500 đồng lợi nhuận trước thuế/tháng nếu giữ được sản lượng, giá đối tác và chi phí AI như kế hoạch. Kết quả cần được kiểm chứng bằng đơn hàng trả tiền, báo giá đối tác và thử nghiệm kỹ thuật trước khi kết luận khả thi.
+
+GHI CHÚ VỀ BẢNG TÍNH
+
+Bảng THE_BOYS_CP3_PnL.xlsx đã được cập nhật theo mô hình nền tảng và đối tác sản xuất trong bản nội dung này. Mặc định giá 300.000 đồng để đối chiếu CP2. Đổi Gia dinh!B6 thành 390.000 đồng để xem phương án giá thử nghiệm; thay giá đối tác tại Gia dinh!B11 và chi phí AI tại Gia dinh!B9. Chỉ sử dụng kết quả từ bảng đã cập nhật này.

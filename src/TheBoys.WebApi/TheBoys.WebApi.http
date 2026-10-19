@@ -1,0 +1,6 @@
+@TheBoys.WebApi_HostAddress = http://localhost:5133
+
+GET {{TheBoys.WebApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
