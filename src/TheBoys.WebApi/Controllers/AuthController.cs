@@ -4,8 +4,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using TheBoys.Application.Common.Interfaces;
 using TheBoys.Domain.Entities;
-using TheBoys.Infrastructure.Persistence;
 using TheBoys.WebApi.Security;
 
 namespace TheBoys.WebApi.Controllers;
@@ -23,7 +23,7 @@ public sealed class LoginRequest
 }
 
 [ApiController, Route("api/auth"), EnableRateLimiting("auth")]
-public sealed class AuthController(ApplicationDbContext db, IPasswordHasher<User> hasher, TokenService tokens) : ApiControllerBase
+public sealed class AuthController(IApplicationDbContext db, IPasswordHasher<User> hasher, TokenService tokens) : ApiControllerBase
 {
     [HttpPost("register"), AllowAnonymous]
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken ct)

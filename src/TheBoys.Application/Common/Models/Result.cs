@@ -1,12 +1,15 @@
 namespace TheBoys.Application.Common.Models;
 
-public record Error(string Code, string Message, ErrorType Type = ErrorType.Failure)
+public record Error(string Code, string Message, ErrorType Type = ErrorType.Failure, object? Extra = null)
 {
     public static readonly Error None = new(string.Empty, string.Empty, ErrorType.Failure);
     public static Error Validation(string code, string message) => new(code, message, ErrorType.Validation);
-    public static Error NotFound(string code, string message) => new(code, message, ErrorType.NotFound);
-    public static Error Conflict(string code, string message) => new(code, message, ErrorType.Conflict);
+    public static Error NotFound(string code, string message = "") => new(code, message, ErrorType.NotFound);
+    public static Error Conflict(string code, string message, object? extra = null) => new(code, message, ErrorType.Conflict, extra);
     public static Error Unauthorized(string code, string message) => new(code, message, ErrorType.Unauthorized);
+    public static Error PaymentRequired(string code, string message) => new(code, message, ErrorType.PaymentRequired);
+    public static Error ServiceUnavailable(string code, string message) => new(code, message, ErrorType.ServiceUnavailable);
+    public static Error BadGateway(string code, string message) => new(code, message, ErrorType.BadGateway);
     public static Error Failure(string code, string message) => new(code, message, ErrorType.Failure);
 }
 
@@ -16,7 +19,10 @@ public enum ErrorType
     Validation,
     NotFound,
     Conflict,
-    Unauthorized
+    Unauthorized,
+    PaymentRequired,
+    ServiceUnavailable,
+    BadGateway
 }
 
 public class Result

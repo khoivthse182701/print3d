@@ -21,6 +21,9 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(provider => 
             provider.GetRequiredService<ApplicationDbContext>());
 
+        services.AddMemoryCache();
+        services.AddSingleton<IUserRoleCache, Services.UserRoleCache>();
+
         services.Configure<MeshyOptions>(configuration.GetSection("AiProviders:Meshy"));
         services.Configure<PrintPricingOptions>(configuration.GetSection("PrintPricing"));
         services.AddSingleton<IModelStorage, LocalModelStorage>();
