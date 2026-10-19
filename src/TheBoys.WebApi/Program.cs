@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Scalar.AspNetCore;
 using TheBoys.Application;
 using TheBoys.Application.Common.Interfaces;
 using TheBoys.Domain.Entities;
@@ -126,12 +127,17 @@ app.UseExceptionHandler(handler => handler.Run(async context =>
         ? "Dữ liệu vừa thay đổi hoặc yêu cầu đã tồn tại. Hãy tải lại và dùng cùng Idempotency-Key."
         : "Không xử lý được yêu cầu. Kiểm tra cấu hình database và log máy chủ.").ExecuteAsync(context);
 }));
-if (app.Environment.IsDevelopment()) app.MapOpenApi();
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+    app.MapScalarApiReference();
+}
 if (!app.Environment.IsDevelopment()) app.UseHttpsRedirection();
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
+app.MapGet("/", () => Results.Redirect("/scalar/v1")).AllowAnonymous();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 app.MapControllers();
 app.Run();
