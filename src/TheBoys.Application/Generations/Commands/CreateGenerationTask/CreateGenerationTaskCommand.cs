@@ -38,7 +38,7 @@ public sealed class CreateGenerationTaskCommandHandler(
         }
 
         if (!provider.IsConfigured)
-            return Result<CreateGenerationTaskResult>.Failure(Error.ServiceUnavailable("ProviderNotConfigured", "Chưa cấu hình AiProviders__Meshy__ApiKey trên server."));
+            return Result<CreateGenerationTaskResult>.Failure(Error.ServiceUnavailable("ProviderNotConfigured", $"Chưa cấu hình API key cho {provider.Name} trên server."));
 
         var user = await db.Users.SingleAsync(x => x.Id == request.UserId, ct);
         if (!user.HasAvailableCredit())
@@ -54,6 +54,7 @@ public sealed class CreateGenerationTaskCommandHandler(
             ClientRequestId = request.ClientRequestId,
             RequestFingerprint = request.RequestFingerprint,
             AiModel = provider.Model,
+            Provider = provider.Name,
             ChargedPurchasedCredit = user.DeductCredit(),
             NextPollAtUtc = DateTime.UtcNow
         };

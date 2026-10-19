@@ -25,18 +25,37 @@ public static class DependencyInjection
         services.AddSingleton<IUserRoleCache, Services.UserRoleCache>();
 
         services.Configure<MeshyOptions>(configuration.GetSection("AiProviders:Meshy"));
+        services.Configure<TripoOptions>(configuration.GetSection("AiProviders:Tripo"));
         services.Configure<PrintPricingOptions>(configuration.GetSection("PrintPricing"));
         services.AddSingleton<IModelStorage, LocalModelStorage>();
-        services.AddHttpClient<IModelGenerationProvider, MeshyProvider>(client =>
+        var activeProvider = configuration["AiProviders:Active"] ?? "Meshy";
+        if (string.Equals(activeProvider, "Tripo", StringComparison.OrdinalIgnoreCase))
         {
-            var baseUrl = configuration["AiProviders:Meshy:BaseUrl"] ?? "https://api.meshy.ai";
-            if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !uri.IsDefaultPort
-                || !string.Equals(uri.Host, "api.meshy.ai", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Meshy BaseUrl phải là https://api.meshy.ai.");
-            client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
-            client.Timeout = TimeSpan.FromSeconds(60);
-        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-        services.AddHttpClient("MeshyAssets", client => client.Timeout = TimeSpan.FromMinutes(5))
+            services.AddHttpClient<IModelGenerationProvider, TripoProvider>(client =>
+            {
+                var baseUrl = configuration["AiProviders:Tripo:BaseUrl"] ?? "https://openapi.tripo3d.ai/v3";
+                if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !uri.IsDefaultPort
+                    || !string.Equals(uri.Host, "openapi.tripo3d.ai", StringComparison.OrdinalIgnoreCase)
+                    || uri.AbsolutePath.TrimEnd('/') != "/v3")
+                    throw new InvalidOperationException("Tripo BaseUrl phải là https://openapi.tripo3d.ai/v3.");
+                client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+                client.Timeout = TimeSpan.FromSeconds(60);
+            }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        }
+        else if (string.Equals(activeProvider, "Meshy", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddHttpClient<IModelGenerationProvider, MeshyProvider>(client =>
+            {
+                var baseUrl = configuration["AiProviders:Meshy:BaseUrl"] ?? "https://api.meshy.ai";
+                if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !uri.IsDefaultPort
+                    || !string.Equals(uri.Host, "api.meshy.ai", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Meshy BaseUrl phải là https://api.meshy.ai.");
+                client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+                client.Timeout = TimeSpan.FromSeconds(60);
+            }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+        }
+        else throw new InvalidOperationException("AiProviders:Active chỉ nhận Meshy hoặc Tripo.");
+        services.AddHttpClient("ModelAssets", client => client.Timeout = TimeSpan.FromMinutes(5))
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddScoped<GenerationProcessor>();
         services.AddHostedService<GenerationWorker>();

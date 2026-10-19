@@ -6,10 +6,12 @@ using TheBoys.Application.Printing;
 namespace TheBoys.Infrastructure.Printing;
 
 public sealed class LocalModelStorage(IHostEnvironment env, IConfiguration configuration,
-    IHttpClientFactory clients, IOptions<MeshyOptions> options) : IModelStorage
+    IHttpClientFactory clients, IOptions<MeshyOptions> meshyOptions, IOptions<TripoOptions> tripoOptions) : IModelStorage
 {
     private readonly string root = Path.GetFullPath(configuration["Storage:Root"] ?? Path.Combine(env.ContentRootPath, "App_Data", "models"));
     private const long MaxAssetBytes = 200L * 1024 * 1024;
+
+    public string ModelKey(Guid id, string kind) => $"{id:N}/model.{kind}";
 
     public string ResolvePath(string key)
     {
@@ -39,19 +41,20 @@ public sealed class LocalModelStorage(IHostEnvironment env, IConfiguration confi
     {
         if (kind is not ("glb" or "stl")) throw new ArgumentException("Định dạng không hợp lệ.");
         var uri = new Uri(url);
-        // Dedicated client: no Meshy Authorization header is ever sent to asset hosts.
-        var client = clients.CreateClient("MeshyAssets");
+        // Dedicated client: provider Authorization headers are never sent to asset hosts.
+        var client = clients.CreateClient("ModelAssets");
+        var allowedHosts = meshyOptions.Value.AssetHosts.Concat(tripoOptions.Value.AssetHosts).ToHashSet(StringComparer.OrdinalIgnoreCase);
         for (var redirects = 0; redirects <= 3; redirects++)
         {
             if (uri.Scheme != "https" || !uri.IsDefaultPort || !string.IsNullOrEmpty(uri.UserInfo)
-                || !options.Value.AssetHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase))
+                || !allowedHosts.Contains(uri.Host))
                 throw new InvalidDataException("Host tải model không thuộc danh sách cho phép.");
             using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, ct);
             if ((int)response.StatusCode is >= 300 and < 400 && response.Headers.Location is { } location)
             { uri = location.IsAbsoluteUri ? location : new Uri(uri, location); continue; }
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength > MaxAssetBytes) throw new InvalidDataException("Model vượt giới hạn 200 MB.");
-            var key = $"{id:N}/model.{kind}";
+            var key = ModelKey(id, kind);
             var path = ResolvePath(key);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var temp = path + ".tmp";

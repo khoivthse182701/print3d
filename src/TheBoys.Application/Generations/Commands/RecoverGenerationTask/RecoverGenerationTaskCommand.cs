@@ -26,7 +26,7 @@ public sealed class RecoverGenerationTaskCommandHandler(
 
         var providerId = string.IsNullOrWhiteSpace(request.ProviderTaskId) ? task.ProviderId() : request.ProviderTaskId;
         if (string.IsNullOrWhiteSpace(providerId))
-            return Result<GenerationTask>.Failure(Error.Validation("MissingProviderId", "Cần task ID của đúng bước hiện tại từ Meshy Developer Platform."));
+            return Result<GenerationTask>.Failure(Error.Validation("MissingProviderId", $"Cần task ID của đúng bước hiện tại từ {provider.Name}."));
 
         try
         {

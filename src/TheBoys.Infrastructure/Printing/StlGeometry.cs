@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Text;
+using System.Text.Json;
 
 namespace TheBoys.Infrastructure.Printing;
 
@@ -9,9 +10,7 @@ public static class StlGeometry
     // STL has no units. Match the already-resized GLB dimensions, then write coordinates in mm.
     public static void NormalizeToMillimeters(string path, decimal widthMm, decimal depthMm, decimal heightMm)
     {
-        var data = File.ReadAllBytes(path);
-        if (data.Length < 84 || 84L + 50L * BitConverter.ToUInt32(data, 80) != data.Length)
-            data = ReadAscii(data);
+        var data = ReadBinary(path);
         var count = BitConverter.ToUInt32(data, 80);
         if (count == 0 || count > 4_000_000) throw new InvalidDataException("STL không có mesh hợp lệ.");
         var min = new Vector3(float.PositiveInfinity);
@@ -46,6 +45,80 @@ public static class StlGeometry
         var temp = path + ".scaled";
         File.WriteAllBytes(temp, data);
         File.Move(temp, path, overwrite: true);
+    }
+
+    public static JsonElement AnalyzePrintability(string path, int intendedHeightMm)
+    {
+        var data = ReadBinary(path);
+        var count = BitConverter.ToUInt32(data, 80);
+        if (count == 0 || count > 4_000_000) throw new InvalidDataException("STL không có mesh hợp lệ.");
+        var min = new Vector3(float.PositiveInfinity);
+        var max = new Vector3(float.NegativeInfinity);
+        double signedVolume = 0;
+        var edges = new Dictionary<EdgeKey, int>();
+        Span<Vector3> vertices = stackalloc Vector3[3];
+        for (var triangle = 0; triangle < count; triangle++)
+        {
+            for (var vertex = 0; vertex < 3; vertex++)
+            {
+                var offset = 84 + triangle * 50 + 12 + vertex * 12;
+                var point = new Vector3(BitConverter.ToSingle(data, offset), BitConverter.ToSingle(data, offset + 4), BitConverter.ToSingle(data, offset + 8));
+                if (!float.IsFinite(point.X) || !float.IsFinite(point.Y) || !float.IsFinite(point.Z))
+                    throw new InvalidDataException("STL có tọa độ không hợp lệ.");
+                vertices[vertex] = point;
+                min = Vector3.Min(min, point); max = Vector3.Max(max, point);
+            }
+            signedVolume += Vector3.Dot(vertices[0], Vector3.Cross(vertices[1], vertices[2])) / 6d;
+            AddEdge(edges, vertices[0], vertices[1]);
+            AddEdge(edges, vertices[1], vertices[2]);
+            AddEdge(edges, vertices[2], vertices[0]);
+        }
+        var extent = max - min;
+        var extents = new[] { (double)extent.X, (double)extent.Y, (double)extent.Z };
+        if (extents.Any(x => !double.IsFinite(x) || x <= 0) || intendedHeightMm <= 0)
+            throw new InvalidDataException("STL có kích thước bằng 0.");
+        var largestAxis = Array.IndexOf(extents, extents.Max());
+        var scale = intendedHeightMm / extents[largestAxis];
+        var horizontal = extents.Where((_, index) => index != largestAxis).Select(x => decimal.Round((decimal)(x * scale), 3)).ToArray();
+        var nonManifoldEdges = edges.Count(x => x.Value != 2);
+        var watertight = nonManifoldEdges == 0;
+        var volumeM3 = watertight ? Math.Abs(signedVolume) * Math.Pow(scale, 3) / 1_000_000_000d : 0d;
+        return JsonSerializer.SerializeToElement(new
+        {
+            status = watertight ? "healthy" : "warning",
+            metrics = new { is_watertight = watertight, volume = volumeM3, non_manifold_edges = nonManifoldEdges, holes = nonManifoldEdges },
+            intended_print = new { dimensions_mm = new decimal[] { horizontal[0], horizontal[1], intendedHeightMm }, wall_thickness_mm = 0.8m },
+            thin_walls = new { status = "unknown" }
+        });
+    }
+
+    private static byte[] ReadBinary(string path)
+    {
+        var data = File.ReadAllBytes(path);
+        if (data.Length < 84 || 84L + 50L * BitConverter.ToUInt32(data, 80) != data.Length)
+            data = ReadAscii(data);
+        return data;
+    }
+
+    private static void AddEdge(Dictionary<EdgeKey, int> edges, Vector3 first, Vector3 second)
+    {
+        var a = VertexKey.From(first); var b = VertexKey.From(second);
+        var edge = a.CompareTo(b) <= 0 ? new EdgeKey(a, b) : new EdgeKey(b, a);
+        edges[edge] = edges.GetValueOrDefault(edge) + 1;
+    }
+
+    private readonly record struct EdgeKey(VertexKey A, VertexKey B);
+    private readonly record struct VertexKey(int X, int Y, int Z) : IComparable<VertexKey>
+    {
+        public static VertexKey From(Vector3 value) => new(BitConverter.SingleToInt32Bits(value.X),
+            BitConverter.SingleToInt32Bits(value.Y), BitConverter.SingleToInt32Bits(value.Z));
+        public int CompareTo(VertexKey other)
+        {
+            var x = X.CompareTo(other.X);
+            if (x != 0) return x;
+            var y = Y.CompareTo(other.Y);
+            return y != 0 ? y : Z.CompareTo(other.Z);
+        }
     }
 
     private static byte[] ReadAscii(byte[] data)
