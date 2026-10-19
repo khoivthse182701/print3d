@@ -1,6 +1,110 @@
-@TheBoys.WebApi_HostAddress = http://localhost:5133
+@baseUrl = http://localhost:5133
+@customerToken = REPLACE_WITH_CUSTOMER_TOKEN
+@staffToken = REPLACE_WITH_STAFF_TOKEN
+@adminToken = REPLACE_WITH_ADMIN_TOKEN
+@taskId = REPLACE_WITH_TASK_ID
+@orderId = REPLACE_WITH_ORDER_ID
+@userId = REPLACE_WITH_USER_ID
+@packageId = 39000000-0000-0000-0000-000000000001
 
-GET {{TheBoys.WebApi_HostAddress}}/weatherforecast/
-Accept: application/json
+### Public packages. Use the actual ID returned if the package existed before seeding.
+GET {{baseUrl}}/api/pricing-packages
 
-###
+### Public registration always creates cus; choose your own password.
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "customer@demo.local",
+  "password": "REPLACE_WITH_YOUR_PASSWORD",
+  "fullName": "Khach demo"
+}
+
+### Login: copy accessToken into the corresponding variable above.
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "customer@demo.local",
+  "password": "REPLACE_WITH_YOUR_PASSWORD"
+}
+
+### Upload. Replace the file path. Use a NEW UUID for a new image/height;
+### reuse the SAME UUID only when retrying an identical request.
+POST {{baseUrl}}/api/generations/image
+Authorization: Bearer {{customerToken}}
+Idempotency-Key: d768bb0b-5e3c-4fb5-9d31-80caa0e06690
+Content-Type: multipart/form-data; boundary=DemoBoundary
+
+--DemoBoundary
+Content-Disposition: form-data; name="heightMm"
+
+100
+--DemoBoundary
+Content-Disposition: form-data; name="shouldTexture"
+
+false
+--DemoBoundary
+Content-Disposition: form-data; name="image"; filename="sample.png"
+Content-Type: image/png
+
+< C:/path/to/sample.png
+--DemoBoundary--
+
+### Poll approximately every 5 seconds until succeeded / failed / needsAttention.
+GET {{baseUrl}}/api/generations/{{taskId}}
+Authorization: Bearer {{customerToken}}
+
+### Server quote. Replace expectedTotalVnd below if shipping/price changes.
+GET {{baseUrl}}/api/generations/{{taskId}}/quote?packageId={{packageId}}&quantity=1
+Authorization: Bearer {{customerToken}}
+
+### Create draft order. A separate idempotency key is used for this operation.
+POST {{baseUrl}}/api/orders
+Authorization: Bearer {{customerToken}}
+Idempotency-Key: 429e8b81-36a3-4ab1-b126-f4627d496924
+Content-Type: application/json
+
+{
+  "generationTaskId": "{{taskId}}",
+  "pricingPackageId": "{{packageId}}",
+  "quantity": 1,
+  "expectedTotalVnd": 390000,
+  "receiverName": "Khach demo",
+  "receiverPhone": "0900000000",
+  "streetAddress": "Dia chi demo",
+  "district": "Quan demo",
+  "city": "Thanh pho Ho Chi Minh"
+}
+
+### Staff reviews the model and slicer output before approval.
+POST {{baseUrl}}/api/generations/{{taskId}}/review
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{ "approved": true, "note": "Da kiem tra model, kich thuoc va support trong slicer." }
+
+### Staff starts printing. Further transitions: packaged -> shipping -> delivered.
+PATCH {{baseUrl}}/api/orders/{{orderId}}/status
+Authorization: Bearer {{staffToken}}
+Content-Type: application/json
+
+{ "status": "printing", "note": "Bat dau in demo offline." }
+
+### Download STL. Coordinates are in mm; approval is separate from download access.
+GET {{baseUrl}}/api/generations/{{taskId}}/files/stl
+Authorization: Bearer {{customerToken}}
+
+### Admin promotes a registered account to staff.
+PATCH {{baseUrl}}/api/admin/users/{{userId}}/role
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "role": "staff" }
+
+### Admin grants app quota (this does not buy Meshy API credits).
+POST {{baseUrl}}/api/admin/users/{{userId}}/credits
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{ "amount": 2 }

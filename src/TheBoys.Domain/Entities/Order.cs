@@ -10,6 +10,13 @@ public sealed class Order : BaseEntity
     public Guid GenerationTaskId { get; set; }
     public Guid PricingPackageId { get; set; }
     public Guid? PartnerLabId { get; set; }
+    public string ClientRequestId { get; set; } = Guid.NewGuid().ToString("N");
+    public string RequestFingerprint { get; set; } = "";
+    public int PrintHeightMm { get; set; }
+    public decimal WidthMmSnapshot { get; set; }
+    public decimal DepthMmSnapshot { get; set; }
+    public decimal HeightMmSnapshot { get; set; }
+    public string MaterialSnapshot { get; set; } = "";
     public OrderStatus Status { get; set; } = OrderStatus.Draft;
 
     // Strategic Financial Snapshots (Bảo toàn số liệu P&L theo nguyên tắc CP3)

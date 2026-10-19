@@ -28,3 +28,11 @@ $RECYCLE.BIN/
 *.log
 *.tmp
 *.bak
+
+## Runtime assets and local configuration
+**/App_Data/
+TestResults/
+.env
+.env.*
+!.env.example
+appsettings.Local.json

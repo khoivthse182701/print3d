@@ -3,8 +3,8 @@ namespace TheBoys.Domain.Enums;
 public enum UserRole
 {
     Customer = 0,
-    PartnerLab = 1,
-    Operator = 2,
+    // Value 1 was PartnerLab. The migration maps legacy accounts to Staff.
+    Staff = 2,
     Admin = 3
 }
 
@@ -21,8 +21,12 @@ public enum GenerationStatus
     MeshOptimizing = 2,
     Succeeded = 3,
     Failed = 4,
-    Expired = 5
+    Expired = 5,
+    NeedsAttention = 6
 }
+
+public enum GenerationStage { Generate, Resize, Convert, Analyze, Complete }
+public enum PrintReviewStatus { Pending, Approved, Rejected }
 
 public enum OrderStatus
 {

@@ -155,7 +155,7 @@ public sealed class GenerationTaskConfiguration : IEntityTypeConfiguration<Gener
         builder.Property(x => x.BoundingBoxY_Mm).HasPrecision(8, 2);
         builder.Property(x => x.BoundingBoxZ_Mm).HasPrecision(8, 2);
         builder.Property(x => x.MinWallThicknessMm).HasPrecision(5, 2);
-        builder.Property(x => x.EstimatedVolumeCm3).HasPrecision(8, 2);
+        builder.Property(x => x.EstimatedVolumeCm3).HasPrecision(18, 4);
 
         builder.Property(x => x.RowVersion).IsRowVersion();
         builder.HasQueryFilter(x => !x.IsDeleted);

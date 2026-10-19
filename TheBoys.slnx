@@ -5,4 +5,7 @@
     <Project Path="src/TheBoys.Infrastructure/TheBoys.Infrastructure.csproj" />
     <Project Path="src/TheBoys.WebApi/TheBoys.WebApi.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TheBoys.Tests/TheBoys.Tests.csproj" />
+  </Folder>
 </Solution>

@@ -10,6 +10,8 @@ public sealed class PricingPackage : BaseEntity
     public decimal PartnerBaseCostVnd { get; set; } = 120000.00m; // 120.000 VNĐ theo CP3
     public string Material { get; set; } = default!; // 'Resin 16K', 'PLA'
     public string HeightRangeCm { get; set; } = default!; // '10 - 12 cm'
+    public int MinHeightMm { get; set; } = 100;
+    public int MaxHeightMm { get; set; } = 120;
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

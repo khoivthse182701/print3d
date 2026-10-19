@@ -24,8 +24,10 @@ public sealed class User : BaseAuditableEntity
 
     public bool HasAvailableCredit() => (FreeTrialRemaining + PurchasedRemaining) > 0;
 
-    public void DeductCredit()
+    public bool DeductCredit()
     {
+        if (!HasAvailableCredit()) throw new InvalidOperationException("Không còn lượt tạo model.");
+        var purchased = FreeTrialRemaining == 0;
         if (FreeTrialRemaining > 0)
         {
             FreeTrialRemaining--;
@@ -35,6 +37,7 @@ public sealed class User : BaseAuditableEntity
             PurchasedRemaining--;
         }
         TotalUsed++;
+        return purchased;
     }
 
     public void RefundCredit(bool wasPurchased = false)

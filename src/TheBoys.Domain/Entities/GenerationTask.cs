@@ -13,6 +13,29 @@ public sealed class GenerationTask : BaseAuditableEntity
     public string? CleanedImageUrl { get; set; }
     public GenerationStatus Status { get; set; } = GenerationStatus.Queued;
     public string? ProviderTaskId { get; set; }
+    public string Provider { get; set; } = "Meshy";
+    public string AiModel { get; set; } = "meshy-6-lite";
+    public bool ShouldTexture { get; set; }
+    public int RequestedHeightMm { get; set; } = 100;
+    public string PrinterType { get; set; } = "sla";
+    public int Progress { get; set; }
+    public GenerationStage Stage { get; set; }
+    public string? ResizeTaskId { get; set; }
+    public string? ConvertTaskId { get; set; }
+    public string? AnalysisTaskId { get; set; }
+    public string? ResizedModelUrl { get; set; }
+    public bool SubmissionPending { get; set; }
+    public DateTime? NextPollAtUtc { get; set; }
+    public string ClientRequestId { get; set; } = Guid.NewGuid().ToString("N");
+    public string RequestFingerprint { get; set; } = "";
+    public bool ChargedPurchasedCredit { get; set; }
+    public bool CreditRefunded { get; set; }
+    public string? PrintabilityStatus { get; set; }
+    public string? PrintabilityJson { get; set; }
+    public PrintReviewStatus ReviewStatus { get; set; }
+    public Guid? ReviewedByUserId { get; set; }
+    public DateTime? ReviewedAtUtc { get; set; }
+    public string? ReviewNote { get; set; }
     public string? ErrorMessage { get; set; }
     public int RetryCount { get; set; }
     public int? DurationSeconds { get; set; }
