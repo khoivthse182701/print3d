@@ -13,6 +13,7 @@ public sealed class MeshyProvider(HttpClient http, IModelStorage storage, IOptio
     : IModelGenerationProvider
 {
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.Value.ApiKey);
+    public string Name => "Meshy";
     public string Model => options.Value.DefaultEngine;
 
     public static string Endpoint(GenerationStage stage) => stage switch

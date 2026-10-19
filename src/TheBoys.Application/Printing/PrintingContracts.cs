@@ -13,6 +13,15 @@ public sealed class MeshyOptions
     public string[] AssetHosts { get; set; } = ["assets.meshy.ai"];
 }
 
+public sealed class TripoOptions
+{
+    public string BaseUrl { get; set; } = "https://openapi.tripo3d.ai/v3";
+    public string ApiKey { get; set; } = "";
+    public string DefaultEngine { get; set; } = "v3.1-20260211";
+    public int PollIntervalSeconds { get; set; } = 5;
+    public string[] AssetHosts { get; set; } = ["cdn.tripo3d.ai"];
+}
+
 public sealed class PrintPricingOptions
 {
     public decimal DemoUnitPriceVnd { get; set; } = 390000;
@@ -51,7 +60,9 @@ public sealed record ProviderTask(string Status, int Progress, IReadOnlyDictiona
 public interface IModelGenerationProvider
 {
     bool IsConfigured { get; }
+    string Name => Model;
     string Model { get; }
+    bool RequiresResizeStage => true;
     Task<string> CreateAsync(GenerationTask task, CancellationToken ct);
     Task<ProviderTask> GetAsync(GenerationStage stage, string taskId, CancellationToken ct);
 }
@@ -61,6 +72,7 @@ public interface IModelStorage
     Task<string> SaveImageAsync(Guid id, byte[] data, string contentType, CancellationToken ct);
     Task<string> ReadImageDataUriAsync(string key, CancellationToken ct);
     Task<string> DownloadAsync(Guid id, string kind, string url, CancellationToken ct);
+    string ModelKey(Guid id, string kind);
     string ResolvePath(string key);
 }
 

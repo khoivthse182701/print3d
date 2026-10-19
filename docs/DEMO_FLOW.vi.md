@@ -110,6 +110,22 @@ Không gửi key qua chat hoặc commit vào Git. Environment trên chỉ sống
 
 API local: `http://localhost:5133`; OpenAPI JSON: `/openapi/v1.json`. File `TheBoys.WebApi.http` có mẫu request. Không có Swagger UI mặc định.
 
+### Dùng Tripo API cho demo
+
+Nhánh `ApiKetTest` chọn Tripo trong môi trường Development. API key chỉ lưu trong .NET User Secrets, không commit vào Git:
+
+```powershell
+dotnet user-secrets set "AiProviders:Tripo:ApiKey" "<TRIPO_API_KEY>" --project src/TheBoys.WebApi
+dotnet run --project src/TheBoys.WebApi -- --initialize-database
+dotnet run --project src/TheBoys.WebApi --launch-profile http
+```
+
+Development dùng database riêng `TheBoys_ApiKetTest` để không đụng schema/dữ liệu demo cũ.
+
+Luồng Tripo: upload ảnh → Image-to-3D → tải GLB về server → convert STL → phân tích mesh và chuẩn hóa STL cục bộ theo chiều cao đã chọn. GLB dùng cho preview; STL đã chuẩn hóa mm dùng cho slicer. URL kết quả Tripo hết hạn nhanh nên worker tải file ngay khi task thành công.
+
+Kiểm tra số dư trước khi demo bằng `GET https://openapi.tripo3d.ai/v3/account/balance`. Trường `balance` là credit khả dụng; `frozen` là credit đang bị giữ cho task chưa kết thúc. Nếu `balance=0`, yêu cầu tạo mới sẽ thất bại và quota nội bộ của người dùng được hoàn lại.
+
 Lệnh initialize áp dụng migrations, seed gói 390k nếu chưa có, tạo Admin đầu tiên từ cấu hình. Nó không reset mật khẩu, không nâng role tài khoản đã có, không ghi đè bảng giá đã sửa. Sau đó đăng ký một tài khoản Staff như khách thường và dùng Admin đổi role sang `staff`.
 
 Nếu database đã được tạo từ `database/TheBoys_Schema_DDL.sql`, không tự chèn migration history rồi chạy tiếp khi chưa đối chiếu schema. Dùng database demo mới là đường nhanh và an toàn; migration baseline cho DB cũ cần xác minh schema riêng. `Database:InitializeOnStartup` mặc định false để không tự sửa DB mỗi lần chạy app.

@@ -61,6 +61,7 @@ public sealed class GenerationsController(ApplicationDbContext db, IModelGenerat
             UserId = UserId, TaskType = TaskType.ImageTo3D, RequestedHeightMm = request.HeightMm,
             ShouldTexture = request.ShouldTexture, ModelName = request.ModelName?.Trim(),
             ClientRequestId = key, RequestFingerprint = fingerprint, AiModel = provider.Model,
+            Provider = provider.Name,
             ChargedPurchasedCredit = user.DeductCredit(), NextPollAtUtc = DateTime.UtcNow
         };
         task.InputImageUrl = await storage.SaveImageAsync(task.Id, data, mime, ct);
@@ -140,7 +141,7 @@ public sealed class GenerationsController(ApplicationDbContext db, IModelGenerat
         if (task == null) return NotFound();
         if (task.Status != GenerationStatus.NeedsAttention) return Conflict(new { message = "Chỉ đối soát task đang cần can thiệp." });
         var providerId = string.IsNullOrWhiteSpace(request.ProviderTaskId) ? task.ProviderId() : request.ProviderTaskId;
-        if (string.IsNullOrWhiteSpace(providerId)) return BadRequest(new { message = "Cần task ID của đúng bước hiện tại từ Meshy Developer Platform." });
+        if (string.IsNullOrWhiteSpace(providerId)) return BadRequest(new { message = $"Cần task ID của đúng bước hiện tại từ {provider.Name}." });
         try { await provider.GetAsync(task.Stage, providerId, ct); }
         catch (ProviderException ex) { return StatusCode(502, new { message = ex.Message }); }
         task.SetProviderId(providerId); task.SubmissionPending = false; task.ErrorMessage = null;

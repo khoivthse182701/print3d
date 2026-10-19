@@ -123,6 +123,7 @@ public sealed class FakeProvider : IModelGenerationProvider
 public sealed class TestStorage : IModelStorage
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "TheBoys_Test_" + Guid.NewGuid().ToString("N"));
+    public string ModelKey(Guid id, string kind) => $"{id}.{kind}";
     public string ResolvePath(string key) => Path.Combine(root, key);
     public async Task<string> SaveImageAsync(Guid id, byte[] data, string contentType, CancellationToken ct)
     {
@@ -132,7 +133,7 @@ public sealed class TestStorage : IModelStorage
     public Task<string> ReadImageDataUriAsync(string key, CancellationToken ct) => Task.FromResult("data:image/png;base64,AA==");
     public async Task<string> DownloadAsync(Guid id, string kind, string url, CancellationToken ct)
     {
-        Directory.CreateDirectory(root); var key = $"{id}.{kind}";
+        Directory.CreateDirectory(root); var key = ModelKey(id, kind);
         await File.WriteAllBytesAsync(ResolvePath(key), kind == "stl" ? PrintingTests.Stl() : new byte[12], ct);
         return key;
     }

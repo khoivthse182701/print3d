@@ -32,7 +32,7 @@ public sealed class GenerationProcessor(ApplicationDbContext db, IModelGeneratio
                 if (task.SubmissionPending)
                 {
                     task.Status = GenerationStatus.NeedsAttention;
-                    task.ErrorMessage = "Có yêu cầu Meshy chưa đối soát được. Staff nhập task ID từ Developer Platform để tiếp tục; không tự gửi lại.";
+                    task.ErrorMessage = $"Có yêu cầu {provider.Name} chưa đối soát được. Staff nhập task ID để tiếp tục; không tự gửi lại.";
                 }
                 else if (task.ProviderId() is not { } providerId)
                 {
@@ -112,7 +112,13 @@ public sealed class GenerationProcessor(ApplicationDbContext db, IModelGeneratio
         switch (task.Stage)
         {
             case GenerationStage.Generate:
-                task.Stage = GenerationStage.Resize;
+                if (provider.RequiresResizeStage) task.Stage = GenerationStage.Resize;
+                else
+                {
+                    task.ResizedModelUrl = result.ModelUrls["glb"];
+                    task.StoragePathGlb = await storage.DownloadAsync(task.Id, "glb", task.ResizedModelUrl, ct);
+                    task.Stage = GenerationStage.Convert;
+                }
                 break;
             case GenerationStage.Resize:
                 task.ResizedModelUrl = result.ModelUrls["glb"];
