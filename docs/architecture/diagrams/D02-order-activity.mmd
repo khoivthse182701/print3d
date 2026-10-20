@@ -1,0 +1,43 @@
+flowchart TD
+    Start((Start)) --> Image["Customer: upload ảnh và chọn chiều cao"]
+    Image --> Valid{"BE: input, consent, credit hợp lệ?"}
+    Valid -->|Không| Error["Trả lỗi; không trừ lượt"]
+    Error --> Stop((End))
+    Valid -->|Có| Generate["BE: debit + job; worker gọi provider"]
+    Generate --> Result{"Kết quả?"}
+    Result -->|Mơ hồ| Reconcile["Staff: đối soát; không POST lại"]
+    Reconcile --> Result
+    Result -->|Generate thất bại xác nhận| Refund["BE: hoàn lượt một lần"]
+    Refund --> Stop
+    Result -->|Thành công| Version["BE: version + file + analysis coverage"]
+    Version --> Review["Staff: kiểm slicer và cấu hình in"]
+    Review --> Printable{"Duyệt kỹ thuật?"}
+    Printable -->|Không| Revise["Customer/Staff: sửa hoặc chọn version mới"]
+    Revise --> Version
+    Printable -->|Có| Confirm["Customer: chốt version, vật liệu, engraving"]
+    Confirm --> Quote["BE: quote tổng giá có expiry"]
+    Quote --> Checkout["Customer: checkout + thanh toán"]
+    Checkout --> Paid{"Gateway: tiền đã xác thực?"}
+    Paid -->|Chờ| Wait["PendingPayment; poll/reconcile"]
+    Wait --> Paid
+    Paid -->|Hủy hoặc hết hạn| Cancel["Cancelled; tiền đến muộn vào đối soát"]
+    Cancel --> Stop
+    Paid -->|Có| Assign["Staff: giao việc cho xưởng"]
+    Assign --> Accepted{"Xưởng nhận?"}
+    Accepted -->|Không| Assign
+    Accepted -->|Có| Print["Xưởng qua Staff: in và hậu kỳ"]
+    Print --> QC{"Staff: QC pass?"}
+    QC -->|Không| Resolution{"In lại hay hoàn tiền?"}
+    Resolution -->|In lại| NewRun["Lưu run lỗi; tạo run mới"]
+    NewRun --> Print
+    Resolution -->|Hoàn tiền| MoneyBack["Admin: reserve refund; gateway xác nhận"]
+    MoneyBack --> Stop
+    QC -->|Có| Pack["Đóng gói và gửi hàng"]
+    Pack --> Delivery{"Giao thành công?"}
+    Delivery -->|Không| Retry["Giao lại hoặc hoàn hàng"]
+    Retry --> Delivery
+    Delivery -->|Có| Delivered["Delivered + bằng chứng"]
+    Delivered --> Complaint{"Khách khiếu nại?"}
+    Complaint -->|Không| Stop
+    Complaint -->|Có| Support["Staff: case + evidence; reprint hoặc refund"]
+    Support --> Stop

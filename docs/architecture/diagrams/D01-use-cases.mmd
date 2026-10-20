@@ -1,0 +1,53 @@
+flowchart LR
+    Customer["Actor: Customer"]
+    Staff["Actor: Staff"]
+    Admin["Actor: Admin"]
+    AI["External: AI Provider"]
+    Gateway["External: Payment Gateway"]
+    subgraph BE["THE BOYS Backend — target P0"]
+        Auth(["UC-01 Quản lý tài khoản"])
+        Gen(["UC-02 Tạo model từ ảnh"])
+        Recover(["UC-03 Đối soát job"])
+        Credits(["UC-04 Quản lý lượt"])
+        Library(["UC-05 Quản lý mẫu và version"])
+        Review(["UC-06 Duyệt kỹ thuật"])
+        Approve(["UC-07 Chốt mẫu và báo giá"])
+        Checkout(["UC-08 Đặt đơn và thanh toán"])
+        Reconcile(["UC-09 Xác nhận giao dịch"])
+        Cancel(["UC-10 Hủy và hoàn tiền"])
+        Assign(["UC-11 Phân công xưởng"])
+        QC(["UC-12 Sản xuất và QC"])
+        Ship(["UC-13 Giao hàng"])
+        Claim(["UC-14 Khiếu nại"])
+        Manage(["UC-15 Quản trị"])
+        Notify(["UC-16 Thông báo"])
+        Ops(["UC-17 Theo dõi vận hành"])
+        Privacy(["UC-18 Dữ liệu cá nhân"])
+    end
+    Customer --- Auth
+    Customer --- Gen
+    Customer --- Library
+    Customer --- Approve
+    Customer --- Checkout
+    Customer --- Cancel
+    Customer --- Claim
+    Customer --- Notify
+    Customer --- Privacy
+    Staff --- Recover
+    Staff --- Review
+    Staff --- Assign
+    Staff --- QC
+    Staff --- Ship
+    Staff --- Claim
+    Staff --- Ops
+    Admin --- Manage
+    Admin --- Cancel
+    Admin --- Credits
+    AI --- Gen
+    AI --- Recover
+    Gateway --- Checkout
+    Gateway --- Reconcile
+    Gateway --- Cancel
+    Gen -. "include: quota" .-> Credits
+    Recover -. "extend: kết quả mơ hồ" .-> Gen
+    Checkout -. "include: xác nhận tiền" .-> Reconcile

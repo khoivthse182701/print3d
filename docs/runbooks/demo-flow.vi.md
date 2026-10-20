@@ -6,7 +6,7 @@
 - Gói mặc định **390.000 VNĐ/mẫu**, số lượng 1–10. Giá 10 cm và 12 cm giống nhau.
 - Tổng = giá gói × số lượng + phí giao hàng lấy từ cấu hình server. Demo mặc định giao hàng **0đ**, không phải báo giá vận chuyển thực tế.
 - Chiều rộng và chiều sâu giữ nguyên tỷ lệ model; không suy ra kích thước vật thật từ ảnh.
-- GLB được resize thật; STL được chuyển từ GLB đã resize, kiểm tra tỷ lệ và chuẩn hóa tọa độ sang mm.
+- Nhánh Meshy resize GLB, convert STL và chuẩn hóa tọa độ sang mm. Nhánh Tripo giữ GLB preview, chuẩn hóa STL cục bộ; phân tích hiện coi cạnh dài nhất là height. Cần Staff kiểm orientation/chiều cao trong slicer, đặc biệt với mẫu rộng hơn cao (R19 trong review).
 - Thể tích mesh được hiển thị để tham khảo, **không dùng để tính giá gói** và không thay thế lượng nhựa/support/infill do slicer tính.
 - Đây là BE. FE dùng các API bên dưới để hiển thị ảnh, tiến độ và viewer 3D. Staff tải STL sang slicer để kiểm tra hướng in/support và gửi tới máy in.
 - Demo dùng thanh toán offline; không tự gọi cổng thanh toán, không tạo giao dịch hay đánh dấu đã trả tiền.
@@ -44,7 +44,7 @@ Chiều cao đã chọn cố định cho mỗi task; đổi chiều cao hiện c
 | `staff` | Các quyền cá nhân; xem task/đơn của tất cả khách; duyệt/từ chối in; cập nhật trạng thái đơn; đối soát task Meshy |
 | `admin` | Quyền Staff; danh sách user; đổi role; cấp lượt tạo; đổi giá/kích hoạt gói in |
 
-Đăng ký công khai chỉ tạo Customer. Request đăng ký có trường `role` bị từ chối. Role thực tế được đọc lại từ database trên mỗi request để token cũ mất quyền ngay khi bị hạ role. API không trả password hash hoặc API key.
+Đăng ký công khai chỉ tạo Customer. Request đăng ký có trường `role` bị từ chối. Role thực tế được cache trong bộ nhớ 60 giây, cache miss mới đọc DB. Đổi role evict cache trên instance xử lý; instance khác có thể giữ role cũ đến hết TTL. API không trả password hash hoặc API key.
 
 Enum database giữ `Customer=0`, `Staff=2`, `Admin=3`. Migration đổi tài khoản PartnerLab cũ (`1`) sang Staff; Operator cũ (`2`) tương ứng Staff. Bảng PartnerLabs vẫn giữ để bảo toàn dữ liệu xưởng/đơn cũ.
 
@@ -112,15 +112,16 @@ API local: `http://localhost:5133`; OpenAPI JSON: `/openapi/v1.json`. File `TheB
 
 ### Dùng Tripo API cho demo
 
-Nhánh `ApiKetTest` chọn Tripo trong môi trường Development. API key chỉ lưu trong .NET User Secrets, không commit vào Git:
+Chọn provider bằng `AiProviders:Active` (mặc định trong code là Meshy). Để chạy Tripo, cấu hình rõ môi trường local. API key chỉ lưu trong .NET User Secrets, không commit vào Git:
 
 ```powershell
 dotnet user-secrets set "AiProviders:Tripo:ApiKey" "<TRIPO_API_KEY>" --project src/TheBoys.WebApi
+$env:AiProviders__Active = 'Tripo'
 dotnet run --project src/TheBoys.WebApi -- --initialize-database
 dotnet run --project src/TheBoys.WebApi --launch-profile http
 ```
 
-Development dùng database riêng `TheBoys_ApiKetTest` để không đụng schema/dữ liệu demo cũ.
+Chọn database riêng bằng `ConnectionStrings__DefaultConnection`. Không giả định tên DB từ nhánh Git hoặc môi trường Development; cấu hình runtime thực tế quyết định nơi kết nối.
 
 Luồng Tripo: upload ảnh → Image-to-3D → tải GLB về server → convert STL → phân tích mesh và chuẩn hóa STL cục bộ theo chiều cao đã chọn. GLB dùng cho preview; STL đã chuẩn hóa mm dùng cho slicer. URL kết quả Tripo hết hạn nhanh nên worker tải file ngay khi task thành công.
 
@@ -128,7 +129,7 @@ Kiểm tra số dư trước khi demo bằng `GET https://openapi.tripo3d.ai/v3/
 
 Lệnh initialize áp dụng migrations, seed gói 390k nếu chưa có, tạo Admin đầu tiên từ cấu hình. Nó không reset mật khẩu, không nâng role tài khoản đã có, không ghi đè bảng giá đã sửa. Sau đó đăng ký một tài khoản Staff như khách thường và dùng Admin đổi role sang `staff`.
 
-Nếu database đã được tạo từ `database/TheBoys_Schema_DDL.sql`, không tự chèn migration history rồi chạy tiếp khi chưa đối chiếu schema. Dùng database demo mới là đường nhanh và an toàn; migration baseline cho DB cũ cần xác minh schema riêng. `Database:InitializeOnStartup` mặc định false để không tự sửa DB mỗi lần chạy app.
+Nếu database đã được tạo từ `database/legacy/TheBoys_Schema_DDL.sql`, không tự chèn migration history rồi chạy tiếp khi chưa đối chiếu schema. Dùng database demo mới là đường nhanh và an toàn; migration baseline cho DB cũ cần xác minh schema riêng. `Database:InitializeOnStartup` mặc định false để không tự sửa DB mỗi lần chạy app.
 
 ## Lượt dùng và credit Meshy
 

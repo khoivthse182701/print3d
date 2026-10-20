@@ -1,0 +1,34 @@
+flowchart LR
+    FE["External FE / Customer"]
+    Gateway["External Gateway"]
+    Provider["External AI Provider"]
+    subgraph Backend["Backend modules — integrated communication"]
+        API["boundary: API / auth"]
+        Gen["control: GenerationService"]
+        Credits["entity service: Credits"]
+        Models["entity service: Models"]
+        Order["control: OrderService"]
+        Pay["boundary + control: Payments"]
+        Work["control: Fulfillment"]
+        Outbox["infrastructure: Outbox / Notifications"]
+        DB[(SQL Server)]
+    end
+    FE -->|"1: createJob"| API
+    API -->|"1.1: validate and submit"| Gen
+    Gen -->|"1.2: debitOnce"| Credits
+    Gen -->|"1.3: submit and poll pinned adapter"| Provider
+    Gen -->|"1.4: publishVersion"| Models
+    FE -->|"2: approve and checkout"| API
+    API -->|"2.1: consumeQuote"| Order
+    Order -->|"2.2: createAttempt"| Pay
+    Pay -->|"2.3: createPayment"| Gateway
+    Gateway -->|"3: verifiedEvent"| Pay
+    Pay -->|"3.1: markPaidOnce"| Order
+    Order -->|"4: assign and start when guards pass"| Work
+    Credits --> DB
+    Models --> DB
+    Order --> DB
+    Pay --> DB
+    Work --> DB
+    DB -->|"5: committed events"| Outbox
+    Outbox -->|"5.1: notify"| FE

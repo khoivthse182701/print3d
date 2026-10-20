@@ -1,0 +1,18 @@
+stateDiagram-v2
+    [*] --> Unpaid
+    Unpaid --> Paid: verifiedCapture [amount matches order]
+    Unpaid --> NeedsAttention: mismatched or late capture
+    Paid --> RefundPending: reserveRefund [sum within captured]
+    PartiallyRefunded --> RefundPending: reserveAdditionalRefund [balance sufficient]
+    RefundPending --> PartiallyRefunded: refundConfirmed [total less than captured]
+    RefundPending --> Refunded: refundConfirmed [total equals captured]
+    RefundPending --> NeedsAttention: providerOutcomeUnknown
+    NeedsAttention --> Paid: reconciliation [valid capture and no refund]
+    NeedsAttention --> RefundPending: reconciliation [refund still reserved]
+    NeedsAttention --> PartiallyRefunded: reconciliation [partial refund confirmed]
+    NeedsAttention --> Refunded: reconciliation [full refund confirmed]
+    Refunded --> [*]
+    note right of RefundPending
+        Failed attempt does not release funds blindly.
+        Query provider and reconcile reservation first.
+    end note

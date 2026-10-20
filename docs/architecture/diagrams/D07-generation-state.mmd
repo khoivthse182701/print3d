@@ -1,0 +1,25 @@
+stateDiagram-v2
+    [*] --> Queued: accept [credit debited once]
+    Queued --> Processing: claim [provider pinned]
+    Queued --> Cancelled: cancel [not submitted] / refundOnce
+    Processing --> Succeeded: finalStageSucceeded [assets validated]
+    Processing --> Failed: providerFailureConfirmed
+    Processing --> NeedsAttention: ambiguousSubmit or invalidOutput
+    NeedsAttention --> Processing: reconcile [matching task ID and evidence]
+    NeedsAttention --> Failed: providerConfirmsFailure
+    Succeeded --> [*]
+    Failed --> [*]
+    Cancelled --> [*]
+    note right of Processing
+        Completed stages advance the checkpoint.
+        GET retries keep the same task ID.
+        Both remain in Processing until terminal.
+    end note
+    note right of Failed
+        Refund app credit only when generation failed
+        before a model was produced. Use ledger once.
+    end note
+    note right of NeedsAttention
+        Alert after prolonged wait.
+        Elapsed time alone does not prove failure.
+    end note

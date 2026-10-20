@@ -1,0 +1,43 @@
+sequenceDiagram
+    actor C as Customer
+    participant API as Generation API - boundary
+    participant S as Generation Service - control
+    participant DB as SQL - entities
+    participant W as Worker
+    participant P as Pinned AI Adapter
+    participant F as Private Storage
+    C->>API: image + configuration + Idempotency-Key
+    API->>S: validated input and owner
+    S->>DB: lookup owner/key
+    alt replay same fingerprint
+        DB-->>API: existing job
+        API-->>C: 200 existing job
+    else new request
+        S->>F: save validated input
+        S->>DB: BEGIN debit + ledger + job + outbox
+        DB-->>S: COMMIT
+        API-->>C: 202 jobId
+        W->>DB: claim stage, mark Submitting, COMMIT
+        W->>P: submit using job provider/model
+        alt task ID received
+            P-->>W: providerTaskId
+            W->>DB: persist ID before polling
+            loop same ID until terminal
+                W->>P: GET status
+                P-->>W: status or retryable GET error
+                W->>DB: progress and next poll
+            end
+            alt success
+                W->>F: download, validate, checksum immutable files
+                W->>DB: stage result, advance or publish version + outbox
+            else generate failed confirmed
+                W->>DB: Failed + refund ledger once + outbox
+            end
+        else POST outcome unknown
+            W->>DB: NeedsAttention + evidence
+            Note over W,P: No automatic POST retry, UC-03 reconciles
+        end
+    end
+    C->>API: GET job
+    API->>DB: owner-filtered read
+    API-->>C: status, stage, safe result URLs

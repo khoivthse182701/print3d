@@ -1,0 +1,37 @@
+sequenceDiagram
+    actor C as Customer
+    participant API as Checkout API - boundary
+    participant O as Order Service - control
+    participant DB as SQL - entities and inbox
+    participant G as Payment Gateway
+    participant N as Outbox Worker
+    C->>API: quoteId + Idempotency-Key
+    API->>O: authenticated checkout
+    O->>DB: BEGIN check quote, owner, expiry and approvals
+    alt stale quote or key mismatch
+        DB-->>O: reject without new order
+        API-->>C: 409 confirm new quote
+    else valid or replay
+        O->>DB: new order/items/history or existing order
+        DB-->>O: COMMIT
+        O->>DB: persist or reuse payment attempt by operation key
+        O->>G: create checkout using merchant reference
+        G-->>API: payment URL or uncertain response
+        API-->>C: order and payment action
+    end
+    C->>G: pay
+    G->>API: signed event
+    API->>O: verified reference, amount, currency
+    O->>DB: BEGIN inbox dedupe + lock order
+    alt duplicate event
+        DB-->>O: no further mutation
+    else wrong amount or late success on cancelled order
+        O->>DB: record receipt and NeedsAttention, no production
+    else matching success
+        O->>DB: capture + Paid + AwaitingAssignment + history + outbox
+    end
+    DB-->>O: COMMIT
+    API-->>G: acknowledgement
+    N->>DB: claim committed notification
+    N-->>C: payment result
+    Note over C,API: Browser redirect alone never marks Paid

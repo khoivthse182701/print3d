@@ -36,3 +36,9 @@ TestResults/
 .env.*
 !.env.example
 appsettings.Local.json
+
+## Documentation tooling and generated artifacts
+node_modules/
+artifacts/
+**/.env.local
+**/appsettings.*.local.json

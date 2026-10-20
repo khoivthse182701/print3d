@@ -1,0 +1,103 @@
+classDiagram
+    class User {
+        +Guid id
+        +Role role
+        +AccountStatus status
+    }
+    class CreditAccount {
+        -int trialBalance
+        -int purchasedBalance
+        +Debit(operationKey)
+        +Refund(debitId)
+    }
+    class CreditEntry {
+        +Guid id
+        +int delta
+        +string bucket
+        +string operationKey
+    }
+    class ModelProject {
+        +Guid id
+        +string name
+    }
+    class GenerationJob {
+        +Guid id
+        +string provider
+        +string model
+        +JobStatus status
+        +Resume(evidence)
+    }
+    class ModelVersion {
+        +Guid id
+        +int versionNo
+        +string geometryHash
+        +decimal heightMm
+    }
+    class ModelAsset {
+        +string storageKey
+        +string sha256
+        +string format
+        +string unit
+    }
+    class PrintReview {
+        +string configurationHash
+        +ReviewDecision decision
+    }
+    class CustomerApproval {
+        +string configurationHash
+        +DateTime approvedAt
+    }
+    class Quote {
+        +decimal totalVnd
+        +DateTime expiresAt
+        +ValidateForCheckout()
+    }
+    class Order {
+        +Guid id
+        +FulfillmentStatus fulfillmentStatus
+        +PaymentStatus paymentStatus
+        +StartProduction()
+        +RequestCancellation()
+    }
+    class OrderItem {
+        +int quantity
+        +decimal unitPriceVnd
+        +string assetHash
+    }
+    class PaymentAttempt {
+        +string merchantReference
+        +decimal amountVnd
+        +Confirm(verifiedEvent)
+    }
+    class Refund {
+        +decimal amountVnd
+        +Reserve()
+    }
+    class PartnerAssignment {
+        +Guid labId
+        +Accept()
+        +Reject(reason)
+    }
+    class ProductionRun {
+        +int runNo
+        +RecordQc(evidence)
+    }
+    User "1" -- "1" CreditAccount : owns
+    CreditAccount "1" -- "0..*" CreditEntry : ledger
+    User "1" -- "0..*" ModelProject : owns
+    ModelProject "1" -- "0..*" GenerationJob : processes
+    ModelProject "1" -- "0..*" ModelVersion : versions
+    GenerationJob "0..1" -- "0..*" ModelVersion : produces
+    ModelVersion "1" *-- "1..*" ModelAsset : published files
+    ModelVersion "1" -- "0..*" PrintReview : technical review
+    ModelVersion "1" -- "0..*" CustomerApproval : confirmation
+    Quote "0..*" --> "1" CustomerApproval : binds
+    Quote "0..*" --> "1" PrintReview : requires approved
+    User "1" -- "0..*" Order : places
+    Order "0..1" --> "1" Quote : consumes
+    Order "1" *-- "1..*" OrderItem : contains
+    OrderItem "0..*" --> "1" ModelVersion : immutable reference
+    Order "1" -- "0..*" PaymentAttempt : attempts
+    PaymentAttempt "1" -- "0..*" Refund : refunds
+    Order "1" -- "0..*" PartnerAssignment : assignment history
+    PartnerAssignment "1" -- "0..*" ProductionRun : print and reprint

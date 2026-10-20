@@ -1,0 +1,26 @@
+stateDiagram-v2
+    [*] --> PendingPayment: checkout(valid quote)
+    PendingPayment --> AwaitingAssignment: paymentConfirmed [matching amount and approvals]
+    PendingPayment --> Cancelled: cancel or expiry [no capture]
+    AwaitingAssignment --> Assigned: labAccepted [one active assignment]
+    Assigned --> AwaitingAssignment: assignmentWithdrawn [no run started]
+    AwaitingAssignment --> Cancelled: cancelAccepted [refund reserved if paid]
+    Assigned --> Cancelled: cancelAccepted [no run started]
+    Assigned --> Printing: startRun [paid and approvals and accepted assignment]
+    Printing --> PostProcessing: printComplete
+    PostProcessing --> QualityCheck: finishingComplete
+    QualityCheck --> Printing: qcFailed [new reprint run approved]
+    QualityCheck --> Cancelled: terminateProduction [failure evidence and refund decision]
+    QualityCheck --> Packaged: qcPassed [evidence recorded]
+    Packaged --> Shipping: dispatched [tracking and carrier]
+    Shipping --> Delivered: deliveryConfirmed [evidence]
+    Shipping --> DeliveryFailed: deliveryAttemptFailed
+    DeliveryFailed --> Shipping: retryDispatch
+    DeliveryFailed --> Returned: returnedToSender
+    Delivered --> [*]
+    Returned --> [*]
+    Cancelled --> [*]
+    note right of Delivered
+        Complaint, refund and after-sales reprint
+        have separate records and lifecycle.
+    end note

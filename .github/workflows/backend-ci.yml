@@ -1,0 +1,50 @@
+name: Backend CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Start SQL LocalDB
+        shell: pwsh
+        run: sqllocaldb start MSSQLLocalDB
+      - run: dotnet tool restore
+      - run: dotnet restore TheBoys.slnx
+      - run: dotnet build TheBoys.slnx --no-restore --configuration Release
+      - name: Unit, contract and SQL integration tests
+        shell: pwsh
+        env:
+          THEBOYS_TEST_SQL: 'Server=(localdb)\MSSQLLocalDB;Trusted_Connection=True;TrustServerCertificate=True'
+        run: dotnet test TheBoys.slnx --no-build --configuration Release --logger trx --results-directory TestResults
+      - name: Verify proposed database schema in scratch database
+        shell: pwsh
+        run: ./scripts/Verify-Design.ps1 -Server '(localdb)\MSSQLLocalDB'
+      - name: Validate documentation links and coverage
+        shell: pwsh
+        run: ./scripts/Verify-Docs.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-results
+          path: TestResults/*.trx
+  diagrams:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/diagrams/package-lock.json
+      - run: npm ci --prefix tools/diagrams
+      - run: node tools/diagrams/render.mjs
+      - name: Ensure gallery matches Mermaid sources
+        run: git diff --exit-code -- docs/architecture/diagrams/README.md
