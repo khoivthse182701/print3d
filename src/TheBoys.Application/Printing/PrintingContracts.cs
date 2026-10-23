@@ -55,7 +55,7 @@ public sealed class PrintPricingService
 }
 
 public sealed record ProviderTask(string Status, int Progress, IReadOnlyDictionary<string, string> ModelUrls,
-    JsonElement? Printability, string? ThumbnailUrl, string? Error, int RetryAfterSeconds = 5);
+    JsonElement? Printability, string? ThumbnailUrl, string? Error, int RetryAfterSeconds = 5, decimal? ProviderCredits = null);
 
 public interface IModelGenerationProvider
 {
@@ -64,7 +64,7 @@ public interface IModelGenerationProvider
     string Model { get; }
     bool RequiresResizeStage => true;
     Task<string> CreateAsync(GenerationTask task, CancellationToken ct);
-    Task<ProviderTask> GetAsync(GenerationStage stage, string taskId, CancellationToken ct);
+    Task<ProviderTask> GetAsync(TheBoys.Domain.Enums.GenerationStage stage, string taskId, CancellationToken ct);
 }
 
 public interface IModelStorage

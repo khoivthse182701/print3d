@@ -1,0 +1,22 @@
+title = "TheBoys Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist for known historical rotated secret commit, test fixtures, and documentation templates"
+commits = [
+    "a7a5006c636fafc1d1f4667fe50e91b32582e183"
+]
+paths = [
+    '''tests/TheBoys\.Tests/Security/.*''',
+    '''tests/TheBoys\.Tests/Fixtures/.*''',
+    '''docs/.*''',
+    '''\.agents/.*'''
+]
+regexes = [
+    '''test-only-secret-not-for-real-use-0123456789''',
+    '''YOUR_MESHY_API_KEY_HERE''',
+    '''YOUR_TRIPO_API_KEY_HERE'''
+]
+

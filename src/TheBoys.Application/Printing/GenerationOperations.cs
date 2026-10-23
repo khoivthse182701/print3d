@@ -1,5 +1,6 @@
 using TheBoys.Domain.Entities;
 using TheBoys.Domain.Enums;
+using GenerationStage = TheBoys.Domain.Enums.GenerationStage;
 
 namespace TheBoys.Application.Printing;
 

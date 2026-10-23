@@ -5,11 +5,32 @@ using System.Text.Json;
 
 namespace TheBoys.Infrastructure.Printing;
 
+public enum ModelUpAxis
+{
+    Z,
+    Y,
+    X
+}
+
 public static class StlGeometry
 {
-    // STL has no units. Match the already-resized GLB dimensions, then write coordinates in mm.
-    public static void NormalizeToMillimeters(string path, decimal widthMm, decimal depthMm, decimal heightMm)
+    public static ModelUpAxis ParseUpAxis(string? upAxis)
     {
+        if (string.IsNullOrWhiteSpace(upAxis)) return ModelUpAxis.Z; // Default established convention in 3D printing
+        return upAxis.Trim().ToUpperInvariant() switch
+        {
+            "Z" or "+Z" => ModelUpAxis.Z,
+            "Y" or "+Y" => ModelUpAxis.Y,
+            "X" or "+X" => ModelUpAxis.X,
+            _ => throw new InvalidDataException($"Trục hướng lên '{upAxis}' không được hỗ trợ. Chỉ hỗ trợ Z, Y hoặc X.")
+        };
+    }
+
+    // STL has no units. Match the already-resized dimensions, then write coordinates in mm.
+    // Scales uniformly by targetHeight / dimensionAlongDeclaredUpAxis.
+    public static void NormalizeToMillimeters(string path, decimal widthMm, decimal depthMm, decimal heightMm, string upAxis = "Z")
+    {
+        var axis = ParseUpAxis(upAxis);
         var data = ReadBinary(path);
         var count = BitConverter.ToUInt32(data, 80);
         if (count == 0 || count > 4_000_000) throw new InvalidDataException("STL không có mesh hợp lệ.");
@@ -24,20 +45,63 @@ public static class StlGeometry
             min = Vector3.Min(min, point); max = Vector3.Max(max, point);
         }
         var extent = max - min;
-        double[] actual = [extent.X, extent.Y, extent.Z];
-        double[] expected = [(double)widthMm, (double)depthMm, (double)heightMm];
-        Array.Sort(actual); Array.Sort(expected);
-        if (actual.Any(x => !double.IsFinite(x) || x <= 0) || expected.Any(x => x <= 0)) throw new InvalidDataException("STL có kích thước bằng 0.");
-        var scale = expected[2] / actual[2];
-        for (var i = 0; i < 3; i++)
-            if (Math.Abs(actual[i] * scale - expected[i]) > Math.Max(0.5, expected[i] * 0.02))
-                throw new InvalidDataException("Tỷ lệ STL không khớp GLB. Cần kiểm tra file trước khi in.");
+        if (extent.X <= 0 || extent.Y <= 0 || extent.Z <= 0 || !float.IsFinite(extent.X) || !float.IsFinite(extent.Y) || !float.IsFinite(extent.Z))
+            throw new InvalidDataException("STL có kích thước bằng 0.");
+        if (widthMm <= 0 || depthMm <= 0 || heightMm <= 0)
+            throw new InvalidDataException("Kích thước yêu cầu phải lớn hơn 0.");
+
+        double scale;
+        double expectedX, expectedY, expectedZ;
+
+        if (axis == ModelUpAxis.Z)
+        {
+            scale = (double)heightMm / extent.Z;
+            expectedX = (double)widthMm;
+            expectedY = (double)depthMm;
+            expectedZ = (double)heightMm;
+
+            if (Math.Abs(extent.X * scale - expectedX) > Math.Max(0.5, expectedX * 0.02)
+                || Math.Abs(extent.Y * scale - expectedY) > Math.Max(0.5, expectedY * 0.02)
+                || Math.Abs(extent.Z * scale - expectedZ) > Math.Max(0.5, expectedZ * 0.02))
+            {
+                throw new InvalidDataException("Tỷ lệ STL không khớp kích thước yêu cầu. Cần kiểm tra file trước khi in.");
+            }
+        }
+        else if (axis == ModelUpAxis.Y)
+        {
+            scale = (double)heightMm / extent.Y;
+            expectedX = (double)widthMm;
+            expectedY = (double)heightMm;
+            expectedZ = (double)depthMm;
+
+            if (Math.Abs(extent.X * scale - expectedX) > Math.Max(0.5, expectedX * 0.02)
+                || Math.Abs(extent.Y * scale - expectedY) > Math.Max(0.5, expectedY * 0.02)
+                || Math.Abs(extent.Z * scale - expectedZ) > Math.Max(0.5, expectedZ * 0.02))
+            {
+                throw new InvalidDataException("Tỷ lệ STL không khớp kích thước yêu cầu. Cần kiểm tra file trước khi in.");
+            }
+        }
+        else // X
+        {
+            scale = (double)heightMm / extent.X;
+            expectedX = (double)heightMm;
+            expectedY = (double)widthMm;
+            expectedZ = (double)depthMm;
+
+            if (Math.Abs(extent.X * scale - expectedX) > Math.Max(0.5, expectedX * 0.02)
+                || Math.Abs(extent.Y * scale - expectedY) > Math.Max(0.5, expectedY * 0.02)
+                || Math.Abs(extent.Z * scale - expectedZ) > Math.Max(0.5, expectedZ * 0.02))
+            {
+                throw new InvalidDataException("Tỷ lệ STL không khớp kích thước yêu cầu. Cần kiểm tra file trước khi in.");
+            }
+        }
+
         for (var triangle = 0; triangle < count; triangle++)
         for (var vertex = 0; vertex < 3; vertex++)
-        for (var axis = 0; axis < 3; axis++)
+        for (var axisIdx = 0; axisIdx < 3; axisIdx++)
         {
-            var offset = 84 + triangle * 50 + 12 + vertex * 12 + axis * 4;
-            var origin = axis == 0 ? min.X : axis == 1 ? min.Y : min.Z;
+            var offset = 84 + triangle * 50 + 12 + vertex * 12 + axisIdx * 4;
+            var origin = axisIdx == 0 ? min.X : axisIdx == 1 ? min.Y : min.Z;
             var result = (float)((BitConverter.ToSingle(data, offset) - origin) * scale);
             BitConverter.TryWriteBytes(data.AsSpan(offset, 4), result);
         }
@@ -47,8 +111,9 @@ public static class StlGeometry
         File.Move(temp, path, overwrite: true);
     }
 
-    public static JsonElement AnalyzePrintability(string path, int intendedHeightMm)
+    public static JsonElement AnalyzePrintability(string path, int intendedHeightMm, string upAxis = "Z")
     {
+        var axis = ParseUpAxis(upAxis);
         var data = ReadBinary(path);
         var count = BitConverter.ToUInt32(data, 80);
         if (count == 0 || count > 4_000_000) throw new InvalidDataException("STL không có mesh hợp lệ.");
@@ -77,9 +142,41 @@ public static class StlGeometry
         var extents = new[] { (double)extent.X, (double)extent.Y, (double)extent.Z };
         if (extents.Any(x => !double.IsFinite(x) || x <= 0) || intendedHeightMm <= 0)
             throw new InvalidDataException("STL có kích thước bằng 0.");
-        var largestAxis = Array.IndexOf(extents, extents.Max());
-        var scale = intendedHeightMm / extents[largestAxis];
-        var horizontal = extents.Where((_, index) => index != largestAxis).Select(x => decimal.Round((decimal)(x * scale), 3)).ToArray();
+
+        double heightExtent = axis switch
+        {
+            ModelUpAxis.Z => (double)extent.Z,
+            ModelUpAxis.Y => (double)extent.Y,
+            ModelUpAxis.X => (double)extent.X,
+            _ => throw new InvalidDataException("Trục hướng lên không hợp lệ.")
+        };
+
+        if (heightExtent <= 0 || !double.IsFinite(heightExtent))
+            throw new InvalidDataException("Kích thước theo trục chiều cao không hợp lệ.");
+
+        // Uniform scaling factor: targetHeight / dimensionAlongDeclaredUpAxis
+        var scale = intendedHeightMm / heightExtent;
+
+        decimal widthMm, depthMm, physicalHeightMm;
+        if (axis == ModelUpAxis.Z)
+        {
+            widthMm = decimal.Round((decimal)(extent.X * scale), 3);
+            depthMm = decimal.Round((decimal)(extent.Y * scale), 3);
+            physicalHeightMm = (decimal)intendedHeightMm;
+        }
+        else if (axis == ModelUpAxis.Y)
+        {
+            widthMm = decimal.Round((decimal)(extent.X * scale), 3);
+            depthMm = decimal.Round((decimal)(extent.Z * scale), 3);
+            physicalHeightMm = (decimal)intendedHeightMm;
+        }
+        else // X
+        {
+            widthMm = decimal.Round((decimal)(extent.Y * scale), 3);
+            depthMm = decimal.Round((decimal)(extent.Z * scale), 3);
+            physicalHeightMm = (decimal)intendedHeightMm;
+        }
+
         var nonManifoldEdges = edges.Count(x => x.Value != 2);
         var watertight = nonManifoldEdges == 0;
         var volumeM3 = watertight ? Math.Abs(signedVolume) * Math.Pow(scale, 3) / 1_000_000_000d : 0d;
@@ -87,7 +184,7 @@ public static class StlGeometry
         {
             status = watertight ? "healthy" : "warning",
             metrics = new { is_watertight = watertight, volume = volumeM3, non_manifold_edges = nonManifoldEdges, holes = nonManifoldEdges },
-            intended_print = new { dimensions_mm = new decimal[] { horizontal[0], horizontal[1], intendedHeightMm }, wall_thickness_mm = 0.8m },
+            intended_print = new { dimensions_mm = new decimal[] { widthMm, depthMm, physicalHeightMm }, wall_thickness_mm = 0.8m },
             thin_walls = new { status = "unknown" }
         });
     }

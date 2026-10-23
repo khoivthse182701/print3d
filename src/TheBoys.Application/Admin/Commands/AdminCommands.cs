@@ -56,23 +56,108 @@ public sealed class UpdateUserRoleCommandHandler(
 }
 
 public sealed record AddUserCreditsCommand(
+    Guid AdminUserId,
     Guid TargetUserId,
-    int Amount
-) : IRequest<Result<User>>;
+    int Amount,
+    string Reason,
+    string IdempotencyKey
+) : IRequest<Result<CreditGrantReceipt>>;
 
-public sealed class AddUserCreditsCommandHandler(IApplicationDbContext db)
-    : IRequestHandler<AddUserCreditsCommand, Result<User>>
+public sealed class AddUserCreditsCommandHandler(ICreditService creditService)
+    : IRequestHandler<AddUserCreditsCommand, Result<CreditGrantReceipt>>
 {
-    public async Task<Result<User>> Handle(AddUserCreditsCommand request, CancellationToken ct)
+    public async Task<Result<CreditGrantReceipt>> Handle(AddUserCreditsCommand request, CancellationToken ct)
     {
-        var user = await db.Users.SingleOrDefaultAsync(x => x.Id == request.TargetUserId, ct);
-        if (user == null) return Result<User>.Failure(Error.NotFound("UserNotFound"));
+        return await creditService.AdminGrantAsync(
+            request.TargetUserId,
+            request.AdminUserId,
+            request.Amount,
+            request.Reason,
+            request.IdempotencyKey,
+            ct);
+    }
+}
 
-        user.PurchasedRemaining += request.Amount;
-        user.UpdatedAtUtc = DateTime.UtcNow;
+public sealed record LockUserAccountCommand(
+    Guid AdminUserId,
+    Guid TargetUserId,
+    string Reason
+) : IRequest<Result>;
+
+public sealed class LockUserAccountCommandHandler(
+    IApplicationDbContext db,
+    IAuditService auditService,
+    IClock clock,
+    IUserRoleCache userRoleCache) : IRequestHandler<LockUserAccountCommand, Result>
+{
+    public async Task<Result> Handle(LockUserAccountCommand request, CancellationToken ct)
+    {
+        if (request.TargetUserId == request.AdminUserId)
+            return Result.Failure(Error.Conflict("CannotLockSelf", "Không thể tự khóa tài khoản của chính mình."));
+
+        var user = await db.Users.SingleOrDefaultAsync(x => x.Id == request.TargetUserId, ct);
+        if (user == null) return Result.Failure(Error.NotFound("UserNotFound"));
+
+        if (user.Role == UserRole.Admin && await db.Users.CountAsync(x => x.Role == UserRole.Admin && x.AccountStatus != AccountStatus.Locked, ct) <= 1)
+            return Result.Failure(Error.Conflict("LastAdmin", "Không thể khóa tài khoản Admin duy nhất còn lại."));
+
+        var now = clock.UtcNow;
+        user.Lock(now);
+
+        var sessions = await db.RefreshSessions.Where(s => s.UserId == request.TargetUserId && s.RevokedAtUtc == null).ToListAsync(ct);
+        foreach (var s in sessions)
+        {
+            s.Revoke(now);
+        }
+
+        await auditService.RecordAsync(
+            request.AdminUserId,
+            "UserAccountLocked",
+            "User",
+            request.TargetUserId,
+            Guid.NewGuid().ToString("N"),
+            new { reason = request.Reason },
+            request.Reason,
+            ct);
 
         await db.SaveChangesAsync(ct);
-        return Result<User>.Success(user);
+        userRoleCache.Remove(request.TargetUserId);
+
+        return Result.Success();
+    }
+}
+
+public sealed record UnlockUserAccountCommand(
+    Guid AdminUserId,
+    Guid TargetUserId
+) : IRequest<Result>;
+
+public sealed class UnlockUserAccountCommandHandler(
+    IApplicationDbContext db,
+    IAuditService auditService,
+    IUserRoleCache userRoleCache) : IRequestHandler<UnlockUserAccountCommand, Result>
+{
+    public async Task<Result> Handle(UnlockUserAccountCommand request, CancellationToken ct)
+    {
+        var user = await db.Users.SingleOrDefaultAsync(x => x.Id == request.TargetUserId, ct);
+        if (user == null) return Result.Failure(Error.NotFound("UserNotFound"));
+
+        user.Unlock();
+
+        await auditService.RecordAsync(
+            request.AdminUserId,
+            "UserAccountUnlocked",
+            "User",
+            request.TargetUserId,
+            Guid.NewGuid().ToString("N"),
+            new { },
+            "Account unlocked by admin",
+            ct);
+
+        await db.SaveChangesAsync(ct);
+        userRoleCache.Remove(request.TargetUserId);
+
+        return Result.Success();
     }
 }
 

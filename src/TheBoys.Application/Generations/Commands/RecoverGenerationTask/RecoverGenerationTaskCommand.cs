@@ -15,7 +15,7 @@ public sealed record RecoverGenerationTaskCommand(
 
 public sealed class RecoverGenerationTaskCommandHandler(
     IApplicationDbContext db,
-    IModelGenerationProvider provider) : IRequestHandler<RecoverGenerationTaskCommand, Result<GenerationTask>>
+    IModelProviderRegistry providerRegistry) : IRequestHandler<RecoverGenerationTaskCommand, Result<GenerationTask>>
 {
     public async Task<Result<GenerationTask>> Handle(RecoverGenerationTaskCommand request, CancellationToken ct)
     {
@@ -23,6 +23,16 @@ public sealed class RecoverGenerationTaskCommandHandler(
         if (task == null) return Result<GenerationTask>.Failure(Error.NotFound("TaskNotFound", "Không tìm thấy tác vụ."));
         if (task.Status != GenerationStatus.NeedsAttention)
             return Result<GenerationTask>.Failure(Error.Conflict("InvalidStatus", "Chỉ đối soát task đang cần can thiệp."));
+
+        IModelGenerationProvider provider;
+        try
+        {
+            provider = providerRegistry.Resolve(task.Provider);
+        }
+        catch (ProviderException ex)
+        {
+            return Result<GenerationTask>.Failure(Error.Conflict("ProviderUnavailable", ex.Message));
+        }
 
         var providerId = string.IsNullOrWhiteSpace(request.ProviderTaskId) ? task.ProviderId() : request.ProviderTaskId;
         if (string.IsNullOrWhiteSpace(providerId))
@@ -40,8 +50,18 @@ public sealed class RecoverGenerationTaskCommandHandler(
         task.SetProviderId(providerId);
         task.SubmissionPending = false;
         task.ErrorMessage = null;
-        task.Status = task.Stage == GenerationStage.Generate ? GenerationStatus.Processing : GenerationStatus.MeshOptimizing;
+        task.Status = task.Stage == TheBoys.Domain.Enums.GenerationStage.Generate ? GenerationStatus.Processing : GenerationStatus.MeshOptimizing;
         task.NextPollAtUtc = DateTime.UtcNow;
+
+        var stage = await db.GenerationStages.FirstOrDefaultAsync(s => s.JobId == task.Id && s.IsActive, ct);
+        if (stage != null)
+        {
+            stage.ProviderTaskId = providerId;
+            stage.SubmissionPending = false;
+            stage.Status = "Running";
+            stage.ErrorMessage = null;
+            stage.NextPollAtUtc = DateTime.UtcNow;
+        }
 
         await db.SaveChangesAsync(ct);
         return Result<GenerationTask>.Success(task);

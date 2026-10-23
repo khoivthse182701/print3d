@@ -18,7 +18,7 @@ public class MigrationUpgradeTests
     {
         var dbName = "TheBoys_Test_" + Guid.NewGuid().ToString("N");
         var connection = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("THEBOYS_TEST_SQL")
-            ?? "Server=localhost;Trusted_Connection=True;TrustServerCertificate=True") { InitialCatalog = dbName };
+            ?? "Server=(localdb)\\MSSQLLocalDB;Trusted_Connection=True;TrustServerCertificate=True") { InitialCatalog = dbName };
         await using var db = new ApplicationDbContext(new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseSqlServer(connection.ConnectionString).Options);
         try
@@ -47,21 +47,49 @@ public class MigrationUpgradeTests
                 }
             }
 
-            var user = new User { Email = "migration@example.test", FullName = "Existing customer" };
-            db.Users.Add(user);
-            await db.SaveChangesAsync();
+            var userId = Guid.NewGuid();
+            await db.Database.ExecuteSqlRawAsync(@"
+                INSERT INTO Users (Id, Email, FullName, Role, FreeTrialRemaining, PurchasedRemaining, TotalUsed, CreatedAtUtc, IsDeleted, IsPhoneVerified)
+                VALUES ({0}, 'migration@example.test', 'Existing customer', 0, 2, 0, 0, SYSUTCDATETIME(), 0, 0)", userId);
+
             await db.Database.MigrateAsync();
             db.ChangeTracker.Clear();
 
-            Assert.Equal("Existing customer", (await db.Users.SingleAsync()).FullName);
-            Assert.Empty(await db.Database.GetPendingMigrationsAsync());
-            var applied = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
-            Assert.Contains("20261019080454_InitialCreate", applied);
-            Assert.Contains("20261019080618_InitialSchema", applied);
-            Assert.EndsWith("MergeMainSchemaAlignment", applied[^1]);
+            var upgradedUser = await db.Users.Include(u => u.CreditAccount).SingleAsync();
+            Assert.Equal("Existing customer", upgradedUser.FullName);
+            Assert.Equal("MIGRATION@EXAMPLE.TEST", upgradedUser.NormalizedEmail);
+            Assert.Equal(Domain.Enums.AccountStatus.Active, upgradedUser.AccountStatus);
+            Assert.NotNull(upgradedUser.CreditAccount);
+            Assert.Equal(2, upgradedUser.CreditAccount.TrialBalance);
+            Assert.Equal(0, upgradedUser.CreditAccount.PurchasedBalance);
+
+            var ledgerEntries = await db.CreditLedger.Where(cl => cl.UserId == upgradedUser.Id).ToListAsync();
+            Assert.Single(ledgerEntries);
+            Assert.Equal(2, ledgerEntries[0].Delta);
+            Assert.Equal(Domain.Enums.CreditBucket.Trial, ledgerEntries[0].Bucket);
+            Assert.Equal(Domain.Enums.CreditLedgerKind.OpeningBalance, ledgerEntries[0].Kind);
+
             // Also prove the final model's feature columns can be queried.
             Assert.Empty(await db.GenerationTasks.ToListAsync());
             Assert.Empty(await db.PricingPackages.ToListAsync());
+            Assert.Empty(await db.AuditLogs.ToListAsync());
+            Assert.Empty(await db.OutboxMessages.ToListAsync());
+            Assert.Empty(await db.IdempotencyRequests.ToListAsync());
+            Assert.Empty(await db.RefreshSessions.ToListAsync());
+            Assert.Empty(await db.IdentityTokens.ToListAsync());
+            Assert.Empty(await db.ConsentRecords.ToListAsync());
+            Assert.Empty(await db.ModelProjects.ToListAsync());
+            Assert.Empty(await db.GenerationJobs.ToListAsync());
+            Assert.Empty(await db.GenerationStages.ToListAsync());
+            Assert.Empty(await db.ModelVersions.ToListAsync());
+            Assert.Empty(await db.ModelAssets.ToListAsync());
+            Assert.Empty(await db.PrintReviews.ToListAsync());
+            Assert.Empty(await db.CustomerApprovals.ToListAsync());
+            Assert.Empty(await db.Quotes.ToListAsync());
+            Assert.Empty(await db.OrderItems.ToListAsync());
+            Assert.Empty(await db.OrderStatusHistories.ToListAsync());
+            Assert.Empty(await db.PaymentAttempts.ToListAsync());
+            Assert.Empty(await db.PaymentEvents.ToListAsync());
 
             await migrator.MigrateAsync("0");
             Assert.Empty(await db.Database.GetAppliedMigrationsAsync());

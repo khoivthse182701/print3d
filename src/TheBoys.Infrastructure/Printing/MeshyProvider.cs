@@ -15,13 +15,14 @@ public sealed class MeshyProvider(HttpClient http, IModelStorage storage, IOptio
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.Value.ApiKey);
     public string Name => "Meshy";
     public string Model => options.Value.DefaultEngine;
+    public bool RequiresResizeStage => true;
 
-    public static string Endpoint(GenerationStage stage) => stage switch
+    public static string Endpoint(TheBoys.Domain.Enums.GenerationStage stage) => stage switch
     {
-        GenerationStage.Generate => "image-to-3d",
-        GenerationStage.Resize => "resize",
-        GenerationStage.Convert => "convert",
-        GenerationStage.Analyze => "print/analyze",
+        TheBoys.Domain.Enums.GenerationStage.Generate => "image-to-3d",
+        TheBoys.Domain.Enums.GenerationStage.Resize => "resize",
+        TheBoys.Domain.Enums.GenerationStage.Convert => "convert",
+        TheBoys.Domain.Enums.GenerationStage.Analyze => "print/analyze",
         _ => throw new ArgumentOutOfRangeException(nameof(stage))
     };
 
@@ -29,15 +30,16 @@ public sealed class MeshyProvider(HttpClient http, IModelStorage storage, IOptio
     {
         object body = task.Stage switch
         {
-            GenerationStage.Generate => new
+            TheBoys.Domain.Enums.GenerationStage.Generate => new
             {
                 image_url = await storage.ReadImageDataUriAsync(task.InputImageUrl!, ct),
-                ai_model = task.AiModel, should_texture = task.ShouldTexture,
+                ai_model = task.AiModel,
+                should_texture = task.ShouldTexture,
                 target_formats = new[] { "glb" }
             },
-            GenerationStage.Resize => new { input_task_id = task.ProviderTaskId, resize_height = task.RequestedHeightMm / 1000m, origin_at = "bottom" },
-            GenerationStage.Convert => new { input_task_id = task.ResizeTaskId, target_formats = new[] { "stl" } },
-            GenerationStage.Analyze => new { model_url = task.ResizedModelUrl, printer_type = task.PrinterType, intended_print_height_mm = task.RequestedHeightMm },
+            TheBoys.Domain.Enums.GenerationStage.Resize => new { input_task_id = task.ProviderTaskId, resize_height = task.RequestedHeightMm / 1000m, origin_at = "bottom" },
+            TheBoys.Domain.Enums.GenerationStage.Convert => new { input_task_id = task.ResizeTaskId, target_formats = new[] { "stl" } },
+            TheBoys.Domain.Enums.GenerationStage.Analyze => new { model_url = task.ResizedModelUrl, printer_type = task.PrinterType, intended_print_height_mm = task.RequestedHeightMm },
             _ => throw new ArgumentOutOfRangeException(nameof(task))
         };
         using var request = Request(HttpMethod.Post, Endpoint(task.Stage));
@@ -56,7 +58,7 @@ public sealed class MeshyProvider(HttpClient http, IModelStorage storage, IOptio
         }
     }
 
-    public async Task<ProviderTask> GetAsync(GenerationStage stage, string taskId, CancellationToken ct)
+    public async Task<ProviderTask> GetAsync(TheBoys.Domain.Enums.GenerationStage stage, string taskId, CancellationToken ct)
     {
         using var request = Request(HttpMethod.Get, $"{Endpoint(stage)}/{Uri.EscapeDataString(taskId)}");
         using var response = await SendAsync(request, false, ct);
@@ -67,15 +69,28 @@ public sealed class MeshyProvider(HttpClient http, IModelStorage storage, IOptio
             var status = root.GetProperty("status").GetString() ?? throw new JsonException();
             var urls = new Dictionary<string, string>();
             if (root.TryGetProperty("model_urls", out var models) && models.ValueKind == JsonValueKind.Object)
+            {
                 foreach (var p in models.EnumerateObject())
-                    if (p.Value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(p.Value.GetString())) urls[p.Name] = p.Value.GetString()!;
+                {
+                    if (p.Value.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(p.Value.GetString()))
+                        urls[p.Name] = p.Value.GetString()!;
+                }
+            }
             JsonElement? analysis = root.TryGetProperty("printability", out var value) && value.ValueKind == JsonValueKind.Object ? value.Clone() : null;
             var retry = response.Headers.RetryAfter?.Delta?.TotalSeconds ??
                 (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow)?.TotalSeconds ?? options.Value.PollIntervalSeconds;
+
+            decimal? credits = null;
+            if (root.TryGetProperty("credits", out var cElem) && cElem.TryGetDecimal(out var cVal))
+                credits = cVal;
+            else if (root.TryGetProperty("cost", out var costElem) && costElem.TryGetDecimal(out var costVal))
+                credits = costVal;
+
             return new(status, root.TryGetProperty("progress", out var p1) ? p1.GetInt32() : 0,
                 urls, analysis, root.TryGetProperty("thumbnail_url", out var thumb) ? thumb.GetString() : null,
                 status is "FAILED" or "CANCELED" ? "Meshy xử lý thất bại. Kiểm tra task trong Developer Platform." : null,
-                (int)Math.Clamp(retry, 5, 300));
+                (int)Math.Clamp(retry, 5, 300),
+                credits);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException or IOException)
         {

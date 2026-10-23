@@ -37,7 +37,7 @@ public sealed class RecoverGenerationRequest
 [ApiController, Route("api/generations"), Authorize]
 public sealed class GenerationsController(ISender mediator, IModelStorage storage) : ApiControllerBase
 {
-    [HttpPost("image"), EnableRateLimiting("generation")]
+    [HttpPost("image"), EnableRateLimiting("generation"), Consumes("multipart/form-data")]
     [RequestSizeLimit(17 * 1024 * 1024), RequestFormLimits(MultipartBodyLengthLimit = 17 * 1024 * 1024)]
     public async Task<IActionResult> Create([FromForm] GenerateImageRequest request,
         [FromHeader(Name = "Idempotency-Key")] string? requestId, CancellationToken ct)
