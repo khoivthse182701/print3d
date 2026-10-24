@@ -45,3 +45,7 @@ appsettings.Production.json
 node_modules/
 artifacts/
 **/.env.local
+
+## AI Agent configurations and skills
+.agents/
+.agent/
