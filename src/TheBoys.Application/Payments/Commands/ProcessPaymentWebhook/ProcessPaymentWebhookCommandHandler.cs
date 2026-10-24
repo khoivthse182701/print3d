@@ -71,10 +71,26 @@ public sealed class ProcessPaymentWebhookCommandHandler(
 
         try
         {
-            // Tìm PaymentAttempt theo MerchantReference và Gateway
+            // Tìm PaymentAttempt theo Gateway và (MerchantReference hoặc ProviderTransactionId)
             var attempt = await db.PaymentAttempts
                 .Include(pa => pa.Order)
-                .SingleOrDefaultAsync(pa => pa.Gateway == gateway.GatewayName && pa.MerchantReference == verification.MerchantReference, ct);
+                .SingleOrDefaultAsync(pa => pa.Gateway == gateway.GatewayName &&
+                    (pa.MerchantReference == verification.MerchantReference ||
+                     (verification.ProviderTransactionId != null && pa.ProviderTransactionId == verification.ProviderTransactionId)), ct);
+
+            // Fallback nếu ngân hàng cắt bớt hoặc loại bỏ dấu gạch ngang (ví dụ PayOS cắt tối đa 25 ký tự)
+            if (attempt == null && !string.IsNullOrWhiteSpace(verification.MerchantReference))
+            {
+                var cleanRef = verification.MerchantReference.Replace("-", "");
+                var pendingAttempts = await db.PaymentAttempts
+                    .Include(pa => pa.Order)
+                    .Where(pa => pa.Gateway == gateway.GatewayName && pa.Status == PaymentAttemptStatus.Pending)
+                    .ToListAsync(ct);
+
+                attempt = pendingAttempts.FirstOrDefault(pa =>
+                    pa.MerchantReference.Replace("-", "").StartsWith(cleanRef, StringComparison.OrdinalIgnoreCase) ||
+                    cleanRef.StartsWith(pa.MerchantReference.Replace("-", ""), StringComparison.OrdinalIgnoreCase));
+            }
 
             if (attempt == null)
             {

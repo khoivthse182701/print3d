@@ -250,6 +250,7 @@ public sealed class PayOSPaymentGateway(
 
             var description = dataProp.TryGetProperty("description", out var descProp) ? descProp.GetString() : null;
             var reference = dataProp.TryGetProperty("reference", out var refProp) ? refProp.GetString() : null;
+            var paymentLinkId = dataProp.TryGetProperty("paymentLinkId", out var plProp) ? plProp.GetString() : null;
             var currency = dataProp.TryGetProperty("currency", out var currProp) ? currProp.GetString() ?? "VND" : "VND";
             var code = dataProp.TryGetProperty("code", out var codeProp) ? codeProp.GetString() : "00";
 
@@ -268,9 +269,9 @@ public sealed class PayOSPaymentGateway(
 
             var isSuccess = string.Equals(code, "00", StringComparison.OrdinalIgnoreCase);
             var eventStatus = isSuccess ? "Succeeded" : "Failed";
-            var eventId = orderCode?.ToString() ?? reference ?? Guid.NewGuid().ToString("N");
+            var eventId = reference ?? orderCode?.ToString() ?? Guid.NewGuid().ToString("N");
             var merchantRef = description ?? orderCode?.ToString() ?? "";
-            var providerTxId = reference ?? orderCode?.ToString();
+            var providerTxId = paymentLinkId ?? reference ?? orderCode?.ToString();
 
             return Task.FromResult(new WebhookVerificationResult(
                 IsValid: true,
