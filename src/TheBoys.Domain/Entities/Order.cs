@@ -79,6 +79,10 @@ public sealed class Order : BaseEntity
     public ICollection<PaymentAttempt> PaymentAttempts { get; set; } = new List<PaymentAttempt>();
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
     public ICollection<OrderStatusHistory> StatusHistories { get; set; } = new List<OrderStatusHistory>();
+    public ICollection<OrderCancellationRequest> CancellationRequests { get; set; } = new List<OrderCancellationRequest>();
+    public ICollection<PartnerAssignment> PartnerAssignments { get; set; } = new List<PartnerAssignment>();
+    public ICollection<Shipment> Shipments { get; set; } = new List<Shipment>();
+    public ICollection<DefectReport> DefectReports { get; set; } = new List<DefectReport>();
 }
 
 public sealed class Payment : BaseEntity

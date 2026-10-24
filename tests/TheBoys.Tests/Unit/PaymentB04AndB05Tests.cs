@@ -8,9 +8,13 @@ using Microsoft.Extensions.Options;
 using TheBoys.Application.Common.Interfaces;
 using TheBoys.Application.Common.Models;
 using TheBoys.Application.Common.Payments;
+using TheBoys.Application.Orders.Commands.CancelOrderV2;
+using TheBoys.Application.Orders.Commands.ReviewCancellationRequest;
 using TheBoys.Application.Payments.Commands.CreatePaymentAttempt;
+using TheBoys.Application.Payments.Commands.CreateRefund;
 using TheBoys.Application.Payments.Commands.ProcessPaymentWebhook;
 using TheBoys.Application.Payments.Commands.ReconcilePaymentAttempt;
+using TheBoys.Application.Payments.Commands.ReconcileRefund;
 using TheBoys.Domain.Entities;
 using TheBoys.Domain.Enums;
 using TheBoys.Infrastructure.Payments;
@@ -605,5 +609,253 @@ public class PaymentB04AndB05Tests(DemoFactory factory) : IClassFixture<DemoFact
         ), CancellationToken.None);
         Assert.False(expiredRes.IsValid);
         Assert.Contains("replay window", expiredRes.FailureReason);
+    }
+
+    [Fact]
+    public async Task Invariant15_Refund_CannotExceedCapturedAmount_EvenWithMultiplePartialRefunds()
+    {
+        var (scope, db, order, reg, clock) = CreateOrderContext("AwaitingAssignment", "Paid", totalAmount: 390000m);
+        using var _ = scope;
+
+        var attempt = PaymentAttempt.Create(order.Id, "Sandbox", $"REF-INV15-{Guid.NewGuid():N}", 390000m, "VND", clock.UtcNow.AddMinutes(30), clock.UtcNow);
+        attempt.MarkSucceeded($"TX-INV15-{Guid.NewGuid():N}", clock.UtcNow);
+        db.PaymentAttempts.Add(attempt);
+        await db.SaveChangesAsync();
+
+        var handler = new CreateRefundCommandHandler(db, reg, clock);
+
+        // 1. First partial refund of 200,000 VND -> Success
+        var ref1Cmd = new CreateRefundCommand(order.Id, factory.StaffId, Guid.NewGuid(), 200000m, "First partial refund", true);
+        var ref1Res = await handler.Handle(ref1Cmd, CancellationToken.None);
+        Assert.True(ref1Res.IsSuccess);
+        Assert.False(ref1Res.Value.IsReplay);
+        Assert.Equal("Succeeded", ref1Res.Value.Refund.Status);
+        Assert.Equal(200000m, ref1Res.Value.Refund.AmountVnd);
+
+        var refreshedOrder = await db.Orders.FindAsync(order.Id);
+        Assert.Equal("PartiallyRefunded", refreshedOrder!.OrderPaymentStatus);
+
+        // 2. Second refund of 250,000 VND -> Exceeds remaining 190,000 -> Fails with RefundExceedsCapturedAmount
+        var ref2Cmd = new CreateRefundCommand(order.Id, factory.StaffId, Guid.NewGuid(), 250000m, "Over-limit refund", true);
+        var ref2Res = await handler.Handle(ref2Cmd, CancellationToken.None);
+        Assert.True(ref2Res.IsFailure);
+        Assert.Equal("RefundExceedsCapturedAmount", ref2Res.Error.Code);
+
+        // 3. Third refund of exactly remaining 190,000 VND -> Success, order transitions to Refunded
+        var ref3Cmd = new CreateRefundCommand(order.Id, factory.StaffId, Guid.NewGuid(), 190000m, "Final partial refund", true);
+        var ref3Res = await handler.Handle(ref3Cmd, CancellationToken.None);
+        Assert.True(ref3Res.IsSuccess);
+        Assert.Equal("Succeeded", ref3Res.Value.Refund.Status);
+
+        await db.Entry(refreshedOrder).ReloadAsync();
+        Assert.Equal("Refunded", refreshedOrder.OrderPaymentStatus);
+
+        // 4. Any further refund (e.g. 10,000 VND) is rejected as remaining is 0
+        var ref4Cmd = new CreateRefundCommand(order.Id, factory.StaffId, Guid.NewGuid(), 10000m, "Extra refund", true);
+        var ref4Res = await handler.Handle(ref4Cmd, CancellationToken.None);
+        Assert.True(ref4Res.IsFailure);
+        Assert.Equal("InvalidOrderPaymentStatus", ref4Res.Error.Code);
+    }
+
+    [Fact]
+    public async Task Invariant16_Refund_ReplaySameOperationKey_ReturnsExistingRefund_NoDoubleRefund()
+    {
+        var (scope, db, order, reg, clock) = CreateOrderContext("AwaitingAssignment", "Paid", totalAmount: 390000m);
+        using var _ = scope;
+
+        var attempt = PaymentAttempt.Create(order.Id, "Sandbox", $"REF-INV16-{Guid.NewGuid():N}", 390000m, "VND", clock.UtcNow.AddMinutes(30), clock.UtcNow);
+        attempt.MarkSucceeded($"TX-INV16-{Guid.NewGuid():N}", clock.UtcNow);
+        db.PaymentAttempts.Add(attempt);
+        await db.SaveChangesAsync();
+
+        var handler = new CreateRefundCommandHandler(db, reg, clock);
+        var opKey = Guid.NewGuid();
+
+        // 1. Customer gọi hoàn tiền trực tiếp -> Bị từ chối Forbidden (401/403)
+        var custCmd = new CreateRefundCommand(order.Id, factory.CustomerId, opKey, 390000m, "Customer try refund", false);
+        var custRes = await handler.Handle(custCmd, CancellationToken.None);
+        Assert.True(custRes.IsFailure);
+        Assert.Equal("Forbidden", custRes.Error.Code);
+
+        // 2. Staff gọi hoàn tiền hợp lệ lần đầu -> Success với IsReplay = false
+        var staffCmd = new CreateRefundCommand(order.Id, factory.StaffId, opKey, 390000m, "Staff approved refund", true);
+        var res1 = await handler.Handle(staffCmd, CancellationToken.None);
+        Assert.True(res1.IsSuccess);
+        Assert.False(res1.Value.IsReplay);
+        Assert.Equal(390000m, res1.Value.Refund.AmountVnd);
+
+        // 3. Replay cùng OperationKey và cùng tham số -> Success với IsReplay = true
+        var res2 = await handler.Handle(staffCmd, CancellationToken.None);
+        Assert.True(res2.IsSuccess);
+        Assert.True(res2.Value.IsReplay);
+        Assert.Equal(res1.Value.Refund.Id, res2.Value.Refund.Id);
+        Assert.Equal(res1.Value.Refund.AmountVnd, res2.Value.Refund.AmountVnd);
+
+        // 4. Replay cùng OperationKey nhưng khác số tiền -> 409 Conflict (IdempotencyMismatch)
+        var mismatchCmd = new CreateRefundCommand(order.Id, factory.StaffId, opKey, 200000m, "Different amount", true);
+        var mismatchRes = await handler.Handle(mismatchCmd, CancellationToken.None);
+        Assert.True(mismatchRes.IsFailure);
+        Assert.Equal("IdempotencyMismatch", mismatchRes.Error.Code);
+
+        // 5. Replay cùng OperationKey nhưng khác OrderId -> 409 Conflict (IdempotencyMismatch)
+        var diffOrderCmd = new CreateRefundCommand(Guid.NewGuid(), factory.StaffId, opKey, 390000m, "Different order", true);
+        var diffOrderRes = await handler.Handle(diffOrderCmd, CancellationToken.None);
+        Assert.True(diffOrderRes.IsFailure);
+        Assert.Equal("IdempotencyMismatch", diffOrderRes.Error.Code);
+
+        // 6. Verify exactly 1 Refund entity exists in DB
+        var count = await db.Refunds.CountAsync(r => r.PaymentAttemptId == attempt.Id);
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    public async Task Invariant17_Refund_TimeoutSetsNeedsAttention_ReconcileSucceeds()
+    {
+        var (scope, db, order, reg, clock) = CreateOrderContext("AwaitingAssignment", "Paid", totalAmount: 390000m);
+        using var _ = scope;
+
+        var attempt = PaymentAttempt.Create(order.Id, "Sandbox", $"REF-INV17-{Guid.NewGuid():N}", 390000m, "VND", clock.UtcNow.AddMinutes(30), clock.UtcNow);
+        attempt.MarkSucceeded($"TX-INV17-{Guid.NewGuid():N}", clock.UtcNow);
+        db.PaymentAttempts.Add(attempt);
+        await db.SaveChangesAsync();
+
+        var createHandler = new CreateRefundCommandHandler(db, reg, clock);
+
+        // 1. Trigger simulated refund timeout
+        var refundCmd = new CreateRefundCommand(order.Id, factory.StaffId, Guid.NewGuid(), 390000m, "SIMULATE_REFUND_TIMEOUT for testing", true);
+        var createRes = await createHandler.Handle(refundCmd, CancellationToken.None);
+
+        Assert.True(createRes.IsSuccess);
+        Assert.Equal("NeedsAttention", createRes.Value.Refund.Status);
+
+        var refreshedOrder = await db.Orders.FindAsync(order.Id);
+        Assert.Equal("NeedsAttention", refreshedOrder!.OrderPaymentStatus);
+
+        // 2. Reconcile by Staff
+        var reconcileHandler = new ReconcileRefundCommandHandler(db, reg, clock);
+        var reconcileCmd = new ReconcileRefundCommand(createRes.Value.Refund.Id, factory.StaffId, "Manual gateway status check confirmed refund executed");
+        var reconcileRes = await reconcileHandler.Handle(reconcileCmd, CancellationToken.None);
+
+        Assert.True(reconcileRes.IsSuccess);
+        Assert.Equal("Succeeded", reconcileRes.Value.Status);
+
+        await db.Entry(refreshedOrder).ReloadAsync();
+        Assert.Equal("Refunded", refreshedOrder.OrderPaymentStatus);
+    }
+
+    [Fact]
+    public async Task Invariant18_CancelUnpaidOrder_TransitionsDirectlyToCancelled_ExpiresPaymentAttempts()
+    {
+        var (scope, db, order, _, clock) = CreateOrderContext("PendingPayment", "Unpaid", totalAmount: 390000m);
+        using var _ = scope;
+
+        var attempt = PaymentAttempt.Create(order.Id, "Sandbox", $"MR-INV18-{Guid.NewGuid():N}", 390000m, "VND", clock.UtcNow.AddMinutes(15), clock.UtcNow);
+        db.PaymentAttempts.Add(attempt);
+        await db.SaveChangesAsync();
+
+        var handler = new CancelOrderV2CommandHandler(db, clock);
+        var cancelCmd = new CancelOrderV2Command(order.Id, factory.CustomerId, "User changed mind before payment", false);
+        var res = await handler.Handle(cancelCmd, CancellationToken.None);
+
+        Assert.True(res.IsSuccess);
+        Assert.Equal("CancelledDirectly", res.Value.CancellationStatus);
+        Assert.Equal("Cancelled", res.Value.FulfillmentStatus);
+        Assert.False(res.Value.RefundRequired);
+
+        // Attempt is marked Expired
+        var refreshedAttempt = await db.PaymentAttempts.FindAsync(attempt.Id);
+        Assert.Equal(PaymentAttemptStatus.Expired, refreshedAttempt!.Status);
+    }
+
+    [Fact]
+    public async Task Invariant19_CancelPaidOrder_CreatesCancellationRequest_CustomerCannotDirectCancelIfPrinting()
+    {
+        // Case A: Customer tries to cancel order already in Printing -> Conflict
+        var (scopeA, dbA, printingOrder, _, clockA) = CreateOrderContext("Printing", "Paid", totalAmount: 390000m);
+        using var _a = scopeA;
+        printingOrder.PrintingStartedAtUtc = clockA.UtcNow.AddHours(-1);
+        await dbA.SaveChangesAsync();
+
+        var handlerA = new CancelOrderV2CommandHandler(dbA, clockA);
+        var cancelCmdA = new CancelOrderV2Command(printingOrder.Id, factory.CustomerId, "Trying to cancel while printing", false);
+        var resA = await handlerA.Handle(cancelCmdA, CancellationToken.None);
+
+        Assert.True(resA.IsFailure);
+        Assert.Equal("CannotCancelInProduction", resA.Error.Code);
+
+        // Case B: Customer requests cancel for Paid order in AwaitingAssignment -> Creates Pending request
+        var (scopeB, dbB, awaitingOrder, _, clockB) = CreateOrderContext("AwaitingAssignment", "Paid", totalAmount: 390000m);
+        using var _b = scopeB;
+
+        var handlerB = new CancelOrderV2CommandHandler(dbB, clockB);
+        var cancelCmdB = new CancelOrderV2Command(awaitingOrder.Id, factory.CustomerId, "Please cancel before lab begins", false);
+        var resB = await handlerB.Handle(cancelCmdB, CancellationToken.None);
+
+        Assert.True(resB.IsSuccess);
+        Assert.Equal("PendingReview", resB.Value.CancellationStatus);
+        Assert.NotNull(resB.Value.CancellationRequestId);
+
+        // Case C: Staff reviews and approves the request
+        var reviewHandler = new ReviewCancellationRequestCommandHandler(dbB, clockB);
+        var reviewCmd = new ReviewCancellationRequestCommand(resB.Value.CancellationRequestId!.Value, factory.StaffId, true, "Approved for refund");
+        var reviewRes = await reviewHandler.Handle(reviewCmd, CancellationToken.None);
+
+        Assert.True(reviewRes.IsSuccess);
+        Assert.Equal("Approved", reviewRes.Value.Status);
+
+        var refreshedOrderB = await dbB.Orders.FindAsync(awaitingOrder.Id);
+        Assert.Equal("Cancelled", refreshedOrderB!.FulfillmentStatus);
+        Assert.Equal("RefundPending", refreshedOrderB.OrderPaymentStatus);
+    }
+
+    [Fact]
+    public async Task Invariant20_LatePaymentOnCancelledOrder_CanBeRefunded_FulfillmentRemainsCancelled()
+    {
+        var (scope, db, order, reg, clock) = CreateOrderContext("Cancelled", "RefundPending", totalAmount: 390000m);
+        using var _ = scope;
+
+        var attempt = PaymentAttempt.Create(order.Id, "Sandbox", $"REF-INV20-{Guid.NewGuid():N}", 390000m, "VND", clock.UtcNow.AddMinutes(30), clock.UtcNow);
+        attempt.MarkSucceeded($"TX-INV20-{Guid.NewGuid():N}", clock.UtcNow);
+        db.PaymentAttempts.Add(attempt);
+        await db.SaveChangesAsync();
+
+        var refundHandler = new CreateRefundCommandHandler(db, reg, clock);
+        var refundCmd = new CreateRefundCommand(order.Id, factory.StaffId, Guid.NewGuid(), null, "Refund customer for late payment on cancelled order", true);
+        var res = await refundHandler.Handle(refundCmd, CancellationToken.None);
+
+        Assert.True(res.IsSuccess);
+        Assert.Equal("Succeeded", res.Value.Refund.Status);
+        Assert.Equal(390000m, res.Value.Refund.AmountVnd);
+
+        var refreshedOrder = await db.Orders.FindAsync(order.Id);
+        Assert.Equal("Refunded", refreshedOrder!.OrderPaymentStatus);
+        Assert.Equal("Cancelled", refreshedOrder.FulfillmentStatus);
+    }
+
+    [Fact]
+    public async Task Invariant21_CreateRefund_ValidatesOrderPaymentStatus_AndRequiresStaffReasonForActiveOrder()
+    {
+        // 1. Order ở trạng thái Unpaid -> Từ chối hoàn tiền với InvalidOrderPaymentStatus
+        var (scope1, db1, unpaidOrder, reg1, clock1) = CreateOrderContext("PendingPayment", "Unpaid", totalAmount: 390000m);
+        using var _1 = scope1;
+        var handler1 = new CreateRefundCommandHandler(db1, reg1, clock1);
+        var cmd1 = new CreateRefundCommand(unpaidOrder.Id, factory.StaffId, Guid.NewGuid(), 390000m, "Staff note", true);
+        var res1 = await handler1.Handle(cmd1, CancellationToken.None);
+        Assert.True(res1.IsFailure);
+        Assert.Equal("InvalidOrderPaymentStatus", res1.Error.Code);
+
+        // 2. Order chưa hủy (active: AwaitingAssignment) nhưng không có lý do hoàn tiền cụ thể -> Bị từ chối
+        var (scope2, db2, activeOrder, reg2, clock2) = CreateOrderContext("AwaitingAssignment", "Paid", totalAmount: 390000m);
+        using var _2 = scope2;
+        var attempt2 = PaymentAttempt.Create(activeOrder.Id, "Sandbox", $"REF-INV21-{Guid.NewGuid():N}", 390000m, "VND", clock2.UtcNow.AddMinutes(30), clock2.UtcNow);
+        attempt2.MarkSucceeded($"TX-INV21-{Guid.NewGuid():N}", clock2.UtcNow);
+        db2.PaymentAttempts.Add(attempt2);
+        await db2.SaveChangesAsync();
+
+        var handler2 = new CreateRefundCommandHandler(db2, reg2, clock2);
+        var cmd2 = new CreateRefundCommand(activeOrder.Id, factory.StaffId, Guid.NewGuid(), 100000m, "", true);
+        var res2 = await handler2.Handle(cmd2, CancellationToken.None);
+        Assert.True(res2.IsFailure);
+        Assert.Equal("RefundReasonRequiredForActiveOrder", res2.Error.Code);
     }
 }

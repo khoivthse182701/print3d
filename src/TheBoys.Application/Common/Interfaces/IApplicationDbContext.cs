@@ -33,8 +33,19 @@ public interface IApplicationDbContext
     DbSet<Payment> Payments { get; }
     DbSet<PaymentAttempt> PaymentAttempts { get; }
     DbSet<PaymentEvent> PaymentEvents { get; }
+    DbSet<Refund> Refunds { get; }
+    DbSet<OrderCancellationRequest> OrderCancellationRequests { get; }
+    DbSet<PartnerAssignment> PartnerAssignments { get; }
+    DbSet<ProductionRun> ProductionRuns { get; }
+    DbSet<Shipment> Shipments { get; }
+    DbSet<ShipmentEvent> ShipmentEvents { get; }
+    DbSet<DefectReport> DefectReports { get; }
+    DbSet<DefectEvidence> DefectEvidence { get; }
+    DbSet<Notification> Notifications { get; }
+    DbSet<PrivacyRequest> PrivacyRequests { get; }
 
     Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
     Task<IDbContextTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken = default);
+    Task<bool> AcquireApplicationLockAsync(string resourceName, TimeSpan timeout, CancellationToken cancellationToken = default);
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -46,6 +46,13 @@ public sealed class User : BaseAuditableEntity
     public ICollection<PrintReview> PrintReviews { get; set; } = new List<PrintReview>();
     public ICollection<CustomerApproval> CustomerApprovals { get; set; } = new List<CustomerApproval>();
     public ICollection<Quote> Quotes { get; set; } = new List<Quote>();
+    public ICollection<PartnerAssignment> AssignedPartnerAssignments { get; set; } = new List<PartnerAssignment>();
+    public ICollection<ShipmentEvent> ShipmentEvents { get; set; } = new List<ShipmentEvent>();
+    public ICollection<DefectReport> DefectReports { get; set; } = new List<DefectReport>();
+    public ICollection<DefectReport> ResolvedDefectReports { get; set; } = new List<DefectReport>();
+    public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+    public ICollection<PrivacyRequest> PrivacyRequests { get; set; } = new List<PrivacyRequest>();
+    public ICollection<PrivacyRequest> HandledPrivacyRequests { get; set; } = new List<PrivacyRequest>();
 
     public bool IsLockedOut(DateTime utcNow)
     {

@@ -7,11 +7,16 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using TheBoys.Application.Common.Interfaces;
 using TheBoys.Application.Orders;
+using TheBoys.Application.Orders.Commands.CancelOrderV2;
 using TheBoys.Application.Orders.Commands.CheckoutQuote;
+using TheBoys.Application.Orders.Commands.ReviewCancellationRequest;
 using TheBoys.Application.Payments.Commands.CreatePaymentAttempt;
+using TheBoys.Application.Payments.Commands.CreateRefund;
 using TheBoys.Application.Payments.DTOs;
+using TheBoys.Application.Payments.Queries.GetOrderRefunds;
 using TheBoys.Application.Quotes;
 using TheBoys.Domain.Entities;
+using TheBoys.WebApi.Security;
 
 namespace TheBoys.WebApi.Controllers.v2;
 
@@ -23,6 +28,24 @@ public sealed class CheckoutQuoteRequest
 public sealed class CreatePaymentAttemptRequest
 {
     public string? Note { get; set; }
+}
+
+public sealed class CancelOrderV2ApiRequest
+{
+    public string Reason { get; set; } = default!;
+    public string? DecisionNote { get; set; }
+}
+
+public sealed class ReviewCancellationRequestApiRequest
+{
+    public bool Approved { get; set; }
+    public string? DecisionNote { get; set; }
+}
+
+public sealed class CreateRefundApiRequest
+{
+    public decimal? AmountVnd { get; set; }
+    public string? Reason { get; set; }
 }
 
 [ApiController, Route("api/v2/orders"), Authorize]
@@ -130,6 +153,92 @@ public sealed class OrdersV2Controller(ISender mediator, IApplicationDbContext d
 
         var dtos = attempts.Select(CreatePaymentAttemptCommandHandler.MapToDto).ToList();
         return Ok(dtos);
+    }
+
+    [HttpPost("{id:guid}/cancel")]
+    public async Task<IActionResult> Cancel(
+        Guid id,
+        [FromBody] CancelOrderV2ApiRequest request,
+        CancellationToken ct)
+    {
+        var command = new CancelOrderV2Command(id, UserId, request.Reason, IsManagement, request.DecisionNote);
+        var result = await mediator.Send(command, ct);
+
+        if (result.IsFailure)
+        {
+            return ProblemResult(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    [HttpPost("cancellation-requests/{requestId:guid}/review")]
+    [Authorize(Roles = Roles.Management)]
+    public async Task<IActionResult> ReviewCancellationRequest(
+        Guid requestId,
+        [FromBody] ReviewCancellationRequestApiRequest request,
+        CancellationToken ct)
+    {
+        var command = new ReviewCancellationRequestCommand(
+            RequestId: requestId,
+            DecidedByUserId: UserId,
+            Approved: request.Approved,
+            DecisionNote: request.DecisionNote
+        );
+
+        var result = await mediator.Send(command, ct);
+        if (result.IsFailure)
+        {
+            return ProblemResult(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
+    [HttpPost("{id:guid}/refunds")]
+    [Authorize(Roles = Roles.Management)]
+    public async Task<IActionResult> CreateRefund(
+        Guid id,
+        [FromBody] CreateRefundApiRequest? request,
+        [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(idempotencyKey) || !Guid.TryParse(idempotencyKey, out var operationKey))
+        {
+            return BadRequest(new { message = "Header Idempotency-Key là bắt buộc và phải là UUID hợp lệ." });
+        }
+
+        var command = new CreateRefundCommand(
+            OrderId: id,
+            RequestedByUserId: UserId,
+            OperationKey: operationKey,
+            AmountVnd: request?.AmountVnd,
+            Reason: request?.Reason ?? "Khách hàng / Quản trị viên yêu cầu hoàn tiền",
+            IsManagement: IsManagement
+        );
+
+        var result = await mediator.Send(command, ct);
+        if (result.IsFailure)
+        {
+            return ProblemResult(result.Error);
+        }
+
+        var (refund, isReplay) = result.Value;
+        return isReplay ? Ok(refund) : StatusCode(StatusCodes.Status201Created, refund);
+    }
+
+    [HttpGet("{id:guid}/refunds")]
+    public async Task<IActionResult> GetRefunds(Guid id, CancellationToken ct)
+    {
+        var query = new GetOrderRefundsQuery(id, UserId, IsManagement);
+        var result = await mediator.Send(query, ct);
+
+        if (result.IsFailure)
+        {
+            return ProblemResult(result.Error);
+        }
+
+        return Ok(result.Value);
     }
 
     private static OrderV2Dto MapToDto(Order o)

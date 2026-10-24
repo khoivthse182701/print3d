@@ -203,7 +203,71 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapGet("/", () => Results.Redirect("/scalar/v1")).AllowAnonymous();
-app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
+
+app.MapGet("/health/live", () => Results.Ok(new { status = "live", timestampUtc = DateTime.UtcNow })).AllowAnonymous();
+
+static async Task<IResult> ExecuteHealthCheckAsync(ApplicationDbContext db, IConfiguration config, IWebHostEnvironment env)
+{
+    var now = DateTime.UtcNow;
+    bool dbHealthy;
+    string dbMessage = "Connected";
+    try
+    {
+        dbHealthy = await db.Database.CanConnectAsync();
+        if (!dbHealthy) dbMessage = "Cannot connect to database";
+    }
+    catch (Exception ex)
+    {
+        dbHealthy = false;
+        dbMessage = ex.Message;
+    }
+
+    bool storageHealthy;
+    string storageMessage = "Storage accessible";
+    try
+    {
+        var storagePath = config["ModelStorage:BasePath"] ?? Path.Combine(env.ContentRootPath, "App_Data", "models");
+        Directory.CreateDirectory(storagePath);
+        var probeFile = Path.Combine(storagePath, $".health_{Guid.NewGuid():N}.tmp");
+        await File.WriteAllTextAsync(probeFile, "health-check");
+        File.Delete(probeFile);
+        storageHealthy = true;
+    }
+    catch (Exception ex)
+    {
+        storageHealthy = false;
+        storageMessage = ex.Message;
+    }
+
+    var meshyKey = config["AiProviders:Meshy:ApiKey"];
+    var tripoKey = config["AiProviders:Tripo:ApiKey"];
+    var aiChecks = new
+    {
+        meshy = new { configured = !string.IsNullOrWhiteSpace(meshyKey) },
+        tripo = new { configured = !string.IsNullOrWhiteSpace(tripoKey) }
+    };
+
+    var isHealthy = dbHealthy && storageHealthy;
+    var statusCode = isHealthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable;
+    var response = new
+    {
+        status = isHealthy ? "ok" : "unhealthy",
+        readiness = isHealthy ? "ready" : "unhealthy",
+        timestampUtc = now,
+        checks = new
+        {
+            database = new { healthy = dbHealthy, status = dbMessage },
+            storage = new { healthy = storageHealthy, status = storageMessage },
+            aiProviders = aiChecks
+        }
+    };
+
+    return Results.Json(response, statusCode: statusCode);
+}
+
+app.MapGet("/health", (ApplicationDbContext db, IConfiguration config, IWebHostEnvironment env) => ExecuteHealthCheckAsync(db, config, env)).AllowAnonymous();
+app.MapGet("/health/ready", (ApplicationDbContext db, IConfiguration config, IWebHostEnvironment env) => ExecuteHealthCheckAsync(db, config, env)).AllowAnonymous();
+
 app.MapControllers();
 app.Run();
 

@@ -43,7 +43,38 @@ public sealed record WebhookVerificationResult(
     string Currency,
     string EventStatus,
     DateTime? EventTimeUtc,
-    string? FailureReason
+    string? FailureReason,
+    bool IsTestWebhook = false
+);
+
+public sealed record SubmitRefundRequest(
+    Guid OrderId,
+    Guid PaymentAttemptId,
+    Guid OperationKey,
+    string MerchantReference,
+    string? ProviderTransactionId,
+    decimal AmountVnd,
+    string Currency,
+    string Reason
+);
+
+public sealed record SubmitRefundResult(
+    bool Success,
+    string? ProviderReference,
+    string? Status,
+    bool IsUncertain,
+    string? ErrorCode,
+    string? ErrorMessage
+);
+
+public sealed record QueryRefundResult(
+    bool Success,
+    string? ProviderReference,
+    string? Status,
+    decimal? AmountVnd,
+    DateTime? CompletedAtUtc,
+    string? RawStatus,
+    string? ErrorMessage
 );
 
 public interface IPaymentGateway
@@ -53,6 +84,8 @@ public interface IPaymentGateway
     Task<CreateCheckoutResult> CreateCheckoutAsync(CreateCheckoutRequest request, CancellationToken ct);
     Task<QueryPaymentResult> QueryPaymentAsync(string merchantReference, CancellationToken ct);
     Task<WebhookVerificationResult> VerifyWebhookAsync(WebhookVerificationRequest request, CancellationToken ct);
+    Task<SubmitRefundResult> SubmitRefundAsync(SubmitRefundRequest request, CancellationToken ct);
+    Task<QueryRefundResult> QueryRefundAsync(string merchantReference, Guid operationKey, CancellationToken ct);
 }
 
 public interface IPaymentGatewayRegistry

@@ -1,0 +1,31 @@
+# Authoring model routing
+
+Use economical subagents for bounded research and candidate drafting. The parent Test Architect owns requirements confirmation, corpus selection, contract and oracle decisions, artifact writes, every CLI gate, score interpretation, and the final report. A worker's answer is a proposal with file and line evidence. It is never a qualified probe or sealed verdict.
+
+## Select a worker at dispatch time
+
+Inspect the current host's available subagent models immediately before dispatch. On Claude, select the latest available Haiku tier. On Codex, select the latest available Luna tier. Do not put a versioned model ID in the dispatch rule or reuse a recorded ID as the next default. If the host does not expose that tier or an exact resolved model, do the task in the parent session and record the fallback. Do not silently substitute another model tier.
+
+Record the provider, requested tier, exact resolved model, host or CLI version when available, and the selection time in `<evaluation-folder>/authoring-log.md`. The logged versioned ID is an audit observation, not a model pin for later dispatches. Recheck availability for a later session.
+
+This routing applies to the agent **authoring** the evaluation. The target model, system prompt, evaluator framework, rubric judge, decoding settings, and isolation conditions are fixed scored conditions. Keep their recorded snapshots and values identical across clean and mutated arms. A model change to any scored condition needs a new comparable run, never an unrecorded worker substitution.
+
+When the adopter asks for the latest target model or model tier, resolve it from the current provider or host catalog before the first live preflight. Do not inherit a versioned adapter default from an older implementation, reuse a prior evaluation's model ID, or assume the host's configured default is current. Record the requested tier, source and time of resolution, exact ID passed to the target, and the same ID in evaluator conditions. Recheck before a new baseline; if the resolved ID changes, update the condition and repeat check, compile, seal, preflight, run, and score. Historical run records retain their original IDs.
+
+## Delegate bounded tasks
+
+Use at most two read-only workers at once. Give each a disjoint source scope, the confirmed requirements statement, a concrete question, a time bound, and this output shape: `candidate`, `source path and line`, `uncertainty`, and `files inspected`. Good tasks are entry-point inventory, failure-history search, candidate boundary cases, candidate mutation locations, and summaries of public evaluator documentation. Workers may draft a probe or oracle fragment as text, but the parent decides whether it enters the corpus or contract.
+
+When the host supports an isolated worker context, start each task without inheriting the parent conversation. Supply a short task packet with the confirmed requirement, exact source paths, the question, and the output shape above. For a later task, start a fresh bounded worker with a new packet; a long worker history can cost more than the research itself. If the host requires inherited context, keep the worker task narrow and record that constraint. Verify source claims and run the same authoring gates regardless of the context mode.
+
+Keep one writer: the parent. Instruct workers to avoid editing the repository, evaluation folder, policy, or run artifacts; launching targets; running `tea-evaluate` or `eval-quality`; or contacting other workers. Some hosts give subagents writable tools even for a read-only request. Pause parent writes during a worker group. Compare the scoped source and evaluation-file inventory and digests before dispatch and after every worker returns. If files changed, reject the affected drafts, identify the writer, and repair worker-attributed edits before continuing. Never send workers secrets, credentials, private user data, `corpus/held-out/`, a held-out plan, held-out results, or a complete held-out request. When a task cannot be split cleanly, keep it in the parent session.
+
+The parent checks every file and line claim before adopting it. Draft probes still pass `tea-evaluate check`, `eval-quality compile` and `seal`, preflight, scored `run`, and `score` at their normal stages. A cheap worker's confidence or self-reported pass does not replace any gate. If a draft fails a gate, record the failure and repair time in the authoring log.
+
+## Show authoring progress and cost
+
+Start an authoring log in `{test_artifacts}/evaluate/` before Stage 1 inspection, then carry it to `<evaluation-folder>/authoring-log.md` when that folder exists. Record each stage's start and completion time, its artifact paths, and its next gate. For each worker task, record dispatch and completion time, scope, context mode (isolated or inherited), requested tier, resolved model, outcome, retries, parent verification and repair time, and reported input/output tokens or cost when available. Write `unknown` for missing usage. Count parent work separately from worker work. On resume, read the existing log, mark any unfinished worker task interrupted, and continue with new entries rather than replacing prior timings. Keep this log outside `corpus/`, `probes/`, `mutations/`, and `runs/` so it does not alter a corpus digest or sealed run.
+
+For a long target run, use the runtime's progress command when available and report its current phase, completed/planned trials, whole-run elapsed time, and last heartbeat. Report scored trial usage separately from authoring usage; a subtotal is not full-run cost. Continue through `score` before reporting a verdict.
+
+To test savings, compare a parent-only authoring pass with a routed pass using the same confirmed requirements, target revision and model, scoring policy, evaluator conditions, and probe scope. Compare authoring wall time, reported tokens and cost, retries, parent repair time, and gate failures. Compare the resulting clean-control, seeded-defect, and held-out outcomes from eval-quality. Run time and target call cost are separate measurements; authoring routing alone does not shorten a scored target call. Record unknown usage explicitly and make no savings claim from incomplete cost data.

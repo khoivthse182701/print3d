@@ -25,6 +25,7 @@ public sealed class PaymentAttempt : BaseEntity
     // Navigation
     public Order Order { get; private set; } = default!;
     public ICollection<PaymentEvent> Events { get; private set; } = new List<PaymentEvent>();
+    public ICollection<Refund> Refunds { get; private set; } = new List<Refund>();
 
     private PaymentAttempt() { }
 

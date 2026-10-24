@@ -198,5 +198,57 @@ public sealed class SePayPaymentGateway(
             ));
         }
     }
+
+    public Task<SubmitRefundResult> SubmitRefundAsync(SubmitRefundRequest request, CancellationToken ct)
+    {
+        if (!IsConfigured)
+        {
+            return Task.FromResult(new SubmitRefundResult(
+                Success: false,
+                ProviderReference: null,
+                Status: "Failed",
+                IsUncertain: false,
+                ErrorCode: "GatewayNotConfigured",
+                ErrorMessage: "Cổng thanh toán SePay chưa được cấu hình API key."
+            ));
+        }
+
+        // SePay currently requires banking integration or manual bank disbursement for refund API;
+        // In offline/staging without live credentials, fails closed or returns NeedsAttention.
+        return Task.FromResult(new SubmitRefundResult(
+            Success: false,
+            ProviderReference: null,
+            Status: "NeedsAttention",
+            IsUncertain: true,
+            ErrorCode: "OfflineRefundUnsupported",
+            ErrorMessage: "SePay yêu cầu liên kết tài khoản ngân hàng để thực hiện hoàn tiền tự động."
+        ));
+    }
+
+    public Task<QueryRefundResult> QueryRefundAsync(string merchantReference, Guid operationKey, CancellationToken ct)
+    {
+        if (!IsConfigured)
+        {
+            return Task.FromResult(new QueryRefundResult(
+                Success: false,
+                ProviderReference: null,
+                Status: "Failed",
+                AmountVnd: null,
+                CompletedAtUtc: clock.UtcNow,
+                RawStatus: "NOT_CONFIGURED",
+                ErrorMessage: "Cổng thanh toán SePay chưa được cấu hình API key."
+            ));
+        }
+
+        return Task.FromResult(new QueryRefundResult(
+            Success: false,
+            ProviderReference: null,
+            Status: "NeedsAttention",
+            AmountVnd: null,
+            CompletedAtUtc: clock.UtcNow,
+            RawStatus: "OFFLINE_QUERY_UNSUPPORTED",
+            ErrorMessage: "Chưa hỗ trợ tra cứu đối soát hoàn tiền ngoại tuyến cho SePay."
+        ));
+    }
 }
 

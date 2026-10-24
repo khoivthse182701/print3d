@@ -40,6 +40,18 @@ public sealed class ProcessPaymentWebhookCommandHandler(
             return Result<ProcessPaymentWebhookResult>.Failure(Error.Unauthorized("InvalidSignature", verification.FailureReason ?? "Chữ ký webhook không hợp lệ."));
         }
 
+        // Hỗ trợ webhook ping / xác nhận kết nối từ trang quản trị cổng thanh toán (ví dụ PayOS orderCode: 123 hoặc VQRIO123)
+        if (verification.IsTestWebhook ||
+            string.Equals(verification.EventId, "123", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(verification.MerchantReference, "VQRIO123", StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<ProcessPaymentWebhookResult>.Success(new(
+                Acknowledged: true,
+                Message: $"{gateway.GatewayName} test webhook acknowledged.",
+                ProcessingResult: "WebhookTestAcknowledged"
+            ));
+        }
+
         var payloadHash = SHA256.HashData(request.RawBody);
         var now = clock.UtcNow;
 

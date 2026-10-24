@@ -209,5 +209,189 @@ public class PaymentV2ApiFlowTests(DemoFactory factory) : IClassFixture<DemoFact
 
         Assert.Single(outboxMessages);
     }
+
+    [Fact]
+    public async Task EndToEnd_OrderCancellationAndFullRefundFlow_ViaApi()
+    {
+        var order = await SeedPendingOrderAsync(390000m);
+        using var customer = await factory.Client(factory.CustomerId);
+        using var staff = await factory.Client(factory.StaffId);
+
+        // 1. Tạo PaymentAttempt
+        var attemptReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/{order.Id}/payment-attempts")
+        {
+            Content = JsonContent.Create(new { note = "Order before cancel" })
+        };
+        attemptReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        var attemptRes = await customer.SendAsync(attemptReq);
+        var attempt = await attemptRes.Content.ReadFromJsonAsync<PaymentAttemptDto>(JsonOptions);
+
+        // 2. Webhook xác nhận thanh toán thành công
+        var webhookPayload = new
+        {
+            eventId = $"EVT-FLOW-{Guid.NewGuid():N}",
+            merchantReference = attempt!.MerchantReference,
+            providerTransactionId = $"TX-FLOW-{Guid.NewGuid():N}",
+            amount = 390000m,
+            currency = "VND",
+            status = "Succeeded"
+        };
+        var rawBody = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(webhookPayload, JsonOptions));
+        var signature = SandboxPaymentGateway.ComputeHmac(rawBody, SandboxPaymentGateway.DefaultSecret);
+
+        using var anonymousClient = factory.CreateClient();
+        var webhookReq = new HttpRequestMessage(HttpMethod.Post, "/api/v2/payments/Sandbox/webhook")
+        {
+            Content = new ByteArrayContent(rawBody)
+        };
+        webhookReq.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        webhookReq.Headers.Add(SandboxPaymentGateway.SignatureHeader, signature);
+        webhookReq.Headers.Add(SandboxPaymentGateway.TimestampHeader, DateTime.UtcNow.ToString("O"));
+        var webhookRes = await anonymousClient.SendAsync(webhookReq);
+        Assert.Equal(HttpStatusCode.OK, webhookRes.StatusCode);
+
+        // 3. Customer không thể tự hoàn tiền (403 Forbidden)
+        var custRefundReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/{order.Id}/refunds")
+        {
+            Content = JsonContent.Create(new { amountVnd = 390000m, reason = "Customer trying to self-refund" })
+        };
+        custRefundReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        var custRefundRes = await customer.SendAsync(custRefundReq);
+        Assert.Equal(HttpStatusCode.Forbidden, custRefundRes.StatusCode);
+
+        // 4. Customer gửi yêu cầu hủy đơn đã Paid -> Trả về PendingReview và sinh CancellationRequestId
+        var cancelReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/{order.Id}/cancel")
+        {
+            Content = JsonContent.Create(new { reason = "Customer requested cancellation before print" })
+        };
+        var cancelRes = await customer.SendAsync(cancelReq);
+        Assert.Equal(HttpStatusCode.OK, cancelRes.StatusCode);
+
+        var cancelResult = await cancelRes.Content.ReadFromJsonAsync<JsonElement>(JsonOptions);
+        Assert.Equal("PendingReview", cancelResult.GetProperty("cancellationStatus").GetString());
+        var cancellationRequestId = cancelResult.GetProperty("cancellationRequestId").GetGuid();
+
+        // 5. Customer không thể tự duyệt yêu cầu hủy đơn (403 Forbidden)
+        var custReviewReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/cancellation-requests/{cancellationRequestId}/review")
+        {
+            Content = JsonContent.Create(new { approved = true, decisionNote = "Customer trying to self-approve" })
+        };
+        var custReviewRes = await customer.SendAsync(custReviewReq);
+        Assert.Equal(HttpStatusCode.Forbidden, custReviewRes.StatusCode);
+
+        // 6. Staff duyệt yêu cầu hủy đơn qua API review cancellation request
+        var staffReviewReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/cancellation-requests/{cancellationRequestId}/review")
+        {
+            Content = JsonContent.Create(new { approved = true, decisionNote = "Staff approved cancellation request" })
+        };
+        var staffReviewRes = await staff.SendAsync(staffReviewReq);
+        Assert.Equal(HttpStatusCode.OK, staffReviewRes.StatusCode);
+
+        var getOrderCancelled = await customer.GetFromJsonAsync<JsonElement>($"/api/v2/orders/{order.Id}", JsonOptions);
+        Assert.Equal("Cancelled", getOrderCancelled.GetProperty("fulfillmentStatus").GetString());
+        Assert.Equal("RefundPending", getOrderCancelled.GetProperty("paymentStatus").GetString());
+
+        // 7. Staff khởi tạo hoàn tiền toàn phần qua POST /api/v2/orders/{id}/refunds -> Trả về 201 Created
+        var refundKey = Guid.NewGuid().ToString();
+        var refundReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/{order.Id}/refunds")
+        {
+            Content = JsonContent.Create(new { amountVnd = 390000m, reason = "Full refund after cancellation" })
+        };
+        refundReq.Headers.Add("Idempotency-Key", refundKey);
+        var refundRes = await staff.SendAsync(refundReq);
+        Assert.Equal(HttpStatusCode.Created, refundRes.StatusCode);
+
+        var refund = await refundRes.Content.ReadFromJsonAsync<RefundDto>(JsonOptions);
+        Assert.NotNull(refund);
+        Assert.Equal("Succeeded", refund.Status);
+        Assert.Equal(390000m, refund.AmountVnd);
+
+        // 8. Replay cùng Idempotency-Key và cùng thông tin -> Trả về 200 OK với cùng dữ liệu (Idempotency Replay)
+        var replayReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/{order.Id}/refunds")
+        {
+            Content = JsonContent.Create(new { amountVnd = 390000m, reason = "Full refund replay" })
+        };
+        replayReq.Headers.Add("Idempotency-Key", refundKey);
+        var replayRes = await staff.SendAsync(replayReq);
+        Assert.Equal(HttpStatusCode.OK, replayRes.StatusCode);
+        var replayed = await replayRes.Content.ReadFromJsonAsync<RefundDto>(JsonOptions);
+        Assert.Equal(refund.Id, replayed!.Id);
+
+        // 9. Replay cùng Idempotency-Key nhưng khác số tiền -> Trả về 409 Conflict (IdempotencyMismatch)
+        var mismatchReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/{order.Id}/refunds")
+        {
+            Content = JsonContent.Create(new { amountVnd = 200000m, reason = "Mismatch amount replay" })
+        };
+        mismatchReq.Headers.Add("Idempotency-Key", refundKey);
+        var mismatchRes = await staff.SendAsync(mismatchReq);
+        Assert.Equal(HttpStatusCode.Conflict, mismatchRes.StatusCode);
+
+        // 10. Kiểm tra trạng thái đơn hàng đã chuyển sang Refunded
+        var getOrderRefunded = await customer.GetFromJsonAsync<JsonElement>($"/api/v2/orders/{order.Id}", JsonOptions);
+        Assert.Equal("Refunded", getOrderRefunded.GetProperty("paymentStatus").GetString());
+        Assert.Equal("Cancelled", getOrderRefunded.GetProperty("fulfillmentStatus").GetString());
+
+        // 11. GET /api/v2/orders/{id}/refunds trả về danh sách có refund vừa tạo
+        var listRes = await customer.GetAsync($"/api/v2/orders/{order.Id}/refunds");
+        Assert.Equal(HttpStatusCode.OK, listRes.StatusCode);
+        var refundsList = await listRes.Content.ReadFromJsonAsync<List<RefundDto>>(JsonOptions);
+        Assert.NotNull(refundsList);
+        Assert.Single(refundsList);
+        Assert.Equal(refund.Id, refundsList[0].Id);
+    }
+
+    [Fact]
+    public async Task Concurrency_MultipleSimultaneousRefundRequests_CannotExceedCapturedAmount()
+    {
+        var order = await SeedPendingOrderAsync(390000m);
+
+        // Setup succeeded payment attempt
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var attempt = PaymentAttempt.Create(order.Id, "Sandbox", $"REF-CONC-{Guid.NewGuid():N}", 390000m, "VND", DateTime.UtcNow.AddMinutes(30), DateTime.UtcNow);
+            attempt.MarkSucceeded($"TX-CONC-{Guid.NewGuid():N}", DateTime.UtcNow);
+            db.PaymentAttempts.Add(attempt);
+
+            var dbOrder = await db.Orders.FindAsync(order.Id);
+            dbOrder!.OrderPaymentStatus = "Paid";
+            dbOrder.Status = Domain.Enums.OrderStatus.Paid;
+            await db.SaveChangesAsync();
+        }
+
+        // Bắn 5 request refund song song có SIMULATE_DELAY (50ms external latency)
+        // Mỗi request đòi hoàn đủ 390,000 VND với Idempotency-Key khác nhau
+        var tasks = Enumerable.Range(0, 5).Select(async _ =>
+        {
+            using var client = await factory.Client(factory.StaffId);
+            var req = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/{order.Id}/refunds")
+            {
+                Content = JsonContent.Create(new { amountVnd = 390000m, reason = "SIMULATE_DELAY: Concurrent full refund test" })
+            };
+            req.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+            return await client.SendAsync(req);
+        }).ToArray();
+
+        var responses = await Task.WhenAll(tasks);
+
+        var successCount = responses.Count(r => r.StatusCode == HttpStatusCode.Created);
+        var conflictCount = responses.Count(r => r.StatusCode == HttpStatusCode.Conflict);
+
+        // Đúng duy nhất 1 request thành công ở bước Reserve, 4 request còn lại bị chặn ngay ở Reserve (409 Conflict)
+        Assert.Equal(1, successCount);
+        Assert.Equal(4, conflictCount);
+
+        // Kiểm tra trong DB: chỉ có đúng 1 Refund thành công với tổng số tiền 390,000 VND
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var succeededRefunds = await db.Refunds
+                .Where(r => r.PaymentAttempt.OrderId == order.Id && r.Status == Domain.Enums.RefundStatus.Succeeded)
+                .ToListAsync();
+
+            Assert.Single(succeededRefunds);
+            Assert.Equal(390000m, succeededRefunds[0].AmountVnd);
+        }
+    }
 }
 

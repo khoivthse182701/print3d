@@ -127,8 +127,7 @@ public class RateLimitingAndProxyTests
         var response = await client.GetAsync("/health");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var content = await response.Content.ReadFromJsonAsync<Dictionary<string, string>>();
-        Assert.NotNull(content);
-        Assert.Equal("ok", content["status"]);
+        var content = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        Assert.Equal("ok", content.GetProperty("status").GetString());
     }
 }

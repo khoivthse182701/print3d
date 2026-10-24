@@ -35,12 +35,16 @@ public sealed class DemoFactory : WebApplicationFactory<Program>, IAsyncLifetime
         {
             ["Database:InitializeOnStartup"] = "false", ["BootstrapAdmin:Email"] = "", ["BootstrapAdmin:Password"] = "",
             ["JwtSettings:Secret"] = "test-only-secret-not-for-real-use-0123456789", ["Logging:LogLevel:Default"] = "Warning",
+            ["PaymentSettings:PayOS:ClientId"] = "test-client-id",
+            ["PaymentSettings:PayOS:ApiKey"] = "test-api-key",
+            ["PaymentSettings:PayOS:ChecksumKey"] = "test-checksum-key-1234567890abcdef",
             ["RateLimitingSettings:AiGenerationPermitLimit"] = "100",
-            ["RateLimitingSettings:AuthPermitLimit"] = "1000"
+            ["RateLimitingSettings:AuthPermitLimit"] = "1000",
+            ["OutboxSettings:Enabled"] = "false"
         }));
         builder.ConfigureServices(services =>
         {
-            foreach (var item in services.Where(x => x.ImplementationType == typeof(GenerationWorker)).ToList()) services.Remove(item);
+            foreach (var item in services.Where(x => x.ImplementationType == typeof(GenerationWorker) || x.ImplementationType?.Name == "OutboxWorkerHostedService").ToList()) services.Remove(item);
             services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
             var connection = new SqlConnectionStringBuilder(Environment.GetEnvironmentVariable("THEBOYS_TEST_SQL")

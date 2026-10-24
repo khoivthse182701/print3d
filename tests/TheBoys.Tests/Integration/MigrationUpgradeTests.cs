@@ -90,6 +90,16 @@ public class MigrationUpgradeTests
             Assert.Empty(await db.OrderStatusHistories.ToListAsync());
             Assert.Empty(await db.PaymentAttempts.ToListAsync());
             Assert.Empty(await db.PaymentEvents.ToListAsync());
+            Assert.Empty(await db.Refunds.ToListAsync());
+            Assert.Empty(await db.OrderCancellationRequests.ToListAsync());
+            Assert.Empty(await db.PartnerAssignments.ToListAsync());
+            Assert.Empty(await db.ProductionRuns.ToListAsync());
+            Assert.Empty(await db.Shipments.ToListAsync());
+            Assert.Empty(await db.ShipmentEvents.ToListAsync());
+            Assert.Empty(await db.DefectReports.ToListAsync());
+            Assert.Empty(await db.DefectEvidence.ToListAsync());
+            Assert.Empty(await db.Notifications.ToListAsync());
+            Assert.Empty(await db.PrivacyRequests.ToListAsync());
 
             await migrator.MigrateAsync("0");
             Assert.Empty(await db.Database.GetAppliedMigrationsAsync());

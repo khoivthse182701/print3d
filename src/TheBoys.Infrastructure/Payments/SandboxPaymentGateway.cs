@@ -217,6 +217,77 @@ public sealed class SandboxPaymentGateway(IClock clock) : IPaymentGateway
         }
     }
 
+    public async Task<SubmitRefundResult> SubmitRefundAsync(SubmitRefundRequest request, CancellationToken ct)
+    {
+        if (request.Reason.Contains("SIMULATE_DELAY", StringComparison.OrdinalIgnoreCase) ||
+            request.MerchantReference.Contains("SIMULATE_DELAY", StringComparison.OrdinalIgnoreCase))
+        {
+            await Task.Delay(50, ct);
+        }
+
+        if (request.Reason.Contains("SIMULATE_REFUND_FAIL", StringComparison.OrdinalIgnoreCase) ||
+            request.MerchantReference.Contains("SIMULATE_REFUND_FAIL", StringComparison.OrdinalIgnoreCase))
+        {
+            return new SubmitRefundResult(
+                Success: false,
+                ProviderReference: null,
+                Status: "Failed",
+                IsUncertain: false,
+                ErrorCode: "SimulatedRefundFailure",
+                ErrorMessage: "Cổng thanh toán sandbox mô phỏng hoàn tiền thất bại."
+            );
+        }
+
+        if (request.Reason.Contains("SIMULATE_REFUND_TIMEOUT", StringComparison.OrdinalIgnoreCase) ||
+            request.MerchantReference.Contains("SIMULATE_REFUND_TIMEOUT", StringComparison.OrdinalIgnoreCase))
+        {
+            return new SubmitRefundResult(
+                Success: false,
+                ProviderReference: null,
+                Status: "NeedsAttention",
+                IsUncertain: true,
+                ErrorCode: "SimulatedRefundTimeout",
+                ErrorMessage: "Cổng thanh toán sandbox mô phỏng timeout khi hoàn tiền."
+            );
+        }
+
+        var providerRef = $"SANDBOX-REF-{request.OperationKey:N}";
+        return new SubmitRefundResult(
+            Success: true,
+            ProviderReference: providerRef,
+            Status: "Succeeded",
+            IsUncertain: false,
+            ErrorCode: null,
+            ErrorMessage: null
+        );
+    }
+
+    public Task<QueryRefundResult> QueryRefundAsync(string merchantReference, Guid operationKey, CancellationToken ct)
+    {
+        if (merchantReference.Contains("SIMULATE_REFUND_FAIL", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(new QueryRefundResult(
+                Success: true,
+                ProviderReference: null,
+                Status: "Failed",
+                AmountVnd: null,
+                CompletedAtUtc: clock.UtcNow,
+                RawStatus: "FAILED",
+                ErrorMessage: "Giao dịch hoàn tiền thất bại tại cổng."
+            ));
+        }
+
+        return Task.FromResult(new QueryRefundResult(
+            Success: true,
+            ProviderReference: $"SANDBOX-REF-{operationKey:N}",
+            Status: "Succeeded",
+            AmountVnd: null,
+            CompletedAtUtc: clock.UtcNow,
+            RawStatus: "SUCCEEDED",
+            ErrorMessage: null
+        ));
+    }
+
     public static string ComputeHmac(byte[] payload, string secret)
     {
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));

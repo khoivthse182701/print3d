@@ -30,6 +30,7 @@ public static class DependencyInjection
         services.AddScoped<IConsentService, Services.ConsentService>();
         services.AddSingleton<IImageValidationService, Services.SkiaImageValidationService>();
         services.AddScoped<IEmailSender, Services.EmailSender>();
+        services.AddSingleton<IPrint3dTelemetry, Services.Print3dTelemetry>();
 
         services.Configure<MeshyOptions>(configuration.GetSection("AiProviders:Meshy"));
         services.Configure<TripoOptions>(configuration.GetSection("AiProviders:Tripo"));
@@ -37,8 +38,10 @@ public static class DependencyInjection
         services.Configure<TheBoys.Application.Quotes.QuoteOptions>(configuration.GetSection("Quote"));
         services.Configure<Payments.PaymentOptions>(configuration.GetSection(Payments.PaymentOptions.SectionName));
         services.AddSingleton<IModelStorage, LocalModelStorage>();
+        services.AddHttpClient("PayOS");
         services.AddSingleton<Application.Common.Payments.IPaymentGateway, Payments.SandboxPaymentGateway>();
         services.AddSingleton<Application.Common.Payments.IPaymentGateway, Payments.SePayPaymentGateway>();
+        services.AddSingleton<Application.Common.Payments.IPaymentGateway, Payments.PayOSPaymentGateway>();
         services.AddSingleton<Application.Common.Payments.IPaymentGatewayRegistry, Payments.PaymentGatewayRegistry>();
 
         // Register both HTTP clients simultaneously
@@ -70,6 +73,9 @@ public static class DependencyInjection
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
         services.AddScoped<GenerationProcessor>();
         services.AddHostedService<GenerationWorker>();
+
+        services.AddScoped<IOutboxDispatcher, Services.OutboxDispatcher>();
+        services.AddHostedService<Services.OutboxWorkerHostedService>();
 
         return services;
     }

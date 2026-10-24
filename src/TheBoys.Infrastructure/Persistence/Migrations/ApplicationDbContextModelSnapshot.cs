@@ -268,6 +268,113 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                     b.ToTable("CustomerApprovals", (string)null);
                 });
 
+            modelBuilder.Entity("TheBoys.Domain.Entities.DefectEvidence", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<Guid>("ReportId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("Sha256")
+                        .IsRequired()
+                        .HasColumnType("binary(32)");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReportId");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique();
+
+                    b.ToTable("DefectEvidence", (string)null);
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.DefectReport", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClientRequestId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("RefundId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ReprintRunId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<Guid?>("ResolvedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("RefundId");
+
+                    b.HasIndex("ReprintRunId")
+                        .IsUnique()
+                        .HasFilter("[ReprintRunId] IS NOT NULL");
+
+                    b.HasIndex("ResolvedByUserId");
+
+                    b.HasIndex("UserId", "ClientRequestId")
+                        .IsUnique();
+
+                    b.ToTable("DefectReports", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_DefectReports_SingleResolution", "([RefundId] IS NULL OR [ReprintRunId] IS NULL)");
+
+                            t.HasCheckConstraint("CK_DefectReports_Status", "[Status] IN ('Open','AwaitingEvidence','Investigating','ReprintApproved','RefundApproved','Rejected','Resolved')");
+                        });
+                });
+
             modelBuilder.Entity("TheBoys.Domain.Entities.GenerationJob", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1134,6 +1241,60 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TheBoys.Domain.Entities.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<DateTime?>("DeliveredAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<Guid>("OutboxMessageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("ReadAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OutboxMessageId");
+
+                    b.HasIndex("UserId", "OutboxMessageId", "Channel")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Notifications_UserOutboxChannel");
+
+                    b.ToTable("Notifications", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Notifications_Channel", "[Channel] IN ('InApp','Email')");
+                        });
+                });
+
             modelBuilder.Entity("TheBoys.Domain.Entities.Order", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1408,6 +1569,73 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TheBoys.Domain.Entities.OrderCancellationRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<DateTime?>("DecidedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<Guid?>("DecidedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("RefundId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DecidedByUserId");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Cancellation_Pending")
+                        .HasFilter("[Status] = 'Pending'");
+
+                    b.HasIndex("RefundId");
+
+                    b.HasIndex("RequestedByUserId")
+                        .HasDatabaseName("IX_Cancellation_RequestedByUserId");
+
+                    b.ToTable("OrderCancellationRequests", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Cancellation_Status", "[Status] IN ('Pending','Approved','Rejected','Completed')");
+                        });
+                });
+
             modelBuilder.Entity("TheBoys.Domain.Entities.OrderItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1621,6 +1849,72 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_OutboxMessages_AttemptNonNegative", "[AttemptCount] >= 0");
 
                             t.HasCheckConstraint("CK_OutboxMessages_JsonValid", "ISJSON([PayloadJson]) = 1");
+                        });
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.PartnerAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("AssignedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("DueAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("PartnerCostSnapshotVnd")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("PartnerLabId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedByUserId");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Assignment_ActiveOrder")
+                        .HasFilter("[IsActive] = 1");
+
+                    b.HasIndex("PartnerLabId");
+
+                    b.ToTable("PartnerAssignments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PartnerAssignments_ActiveState", "(([Status] IN ('Offered','Accepted') AND [IsActive] = 1) OR ([Status] NOT IN ('Offered','Accepted') AND [IsActive] = 0))");
+
+                            t.HasCheckConstraint("CK_PartnerAssignments_Cost", "[PartnerCostSnapshotVnd] >= 0");
+
+                            t.HasCheckConstraint("CK_PartnerAssignments_Status", "[Status] IN ('Offered','Accepted','Rejected','Expired','Completed','Cancelled')");
                         });
                 });
 
@@ -2034,6 +2328,130 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("TheBoys.Domain.Entities.PrivacyRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid?>("HandledByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("RequestType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(20)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HandledByUserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("PrivacyRequests", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PrivacyRequests_Completed", "([Status] <> 'Completed' OR [CompletedAtUtc] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_PrivacyRequests_Status", "[Status] IN ('Pending','OnHold','Processing','Completed','Rejected')");
+
+                            t.HasCheckConstraint("CK_PrivacyRequests_Type", "[RequestType] IN ('DeleteAssets','AnonymizeAccount')");
+                        });
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.ProductionRun", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("ActualCostVnd")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("AssignmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("QcEvidenceStorageKey")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("QcNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<int>("RunNo")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("StartedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignmentId", "RunNo")
+                        .IsUnique();
+
+                    b.ToTable("ProductionRuns", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ProductionRuns_Metrics", "[RunNo] > 0 AND [Quantity] > 0 AND ([ActualCostVnd] IS NULL OR [ActualCostVnd] >= 0)");
+
+                            t.HasCheckConstraint("CK_ProductionRuns_QcPassed", "([Status] <> 'Passed' OR ([QcEvidenceStorageKey] IS NOT NULL AND [QcNote] IS NOT NULL AND [CompletedAtUtc] IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_ProductionRuns_Status", "[Status] IN ('Printing','PostProcessing','QualityCheck','Passed','Failed','Cancelled')");
+                        });
+                });
+
             modelBuilder.Entity("TheBoys.Domain.Entities.Quote", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2167,6 +2585,186 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_RefreshSessions_ExpiryAfterCreated", "[ExpiresAtUtc] > [CreatedAtUtc]");
                         });
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.Refund", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("AmountVnd")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<Guid>("OperationKey")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("PaymentAttemptId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ProviderReference")
+                        .HasMaxLength(150)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(150)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApprovedByUserId");
+
+                    b.HasIndex("OperationKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Refunds_OperationKey");
+
+                    b.HasIndex("RequestedByUserId")
+                        .HasDatabaseName("IX_Refunds_RequestedByUserId");
+
+                    b.HasIndex("PaymentAttemptId", "Status")
+                        .HasDatabaseName("IX_Refunds_PaymentStatus");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("PaymentAttemptId", "Status"), new[] { "AmountVnd" });
+
+                    b.ToTable("Refunds", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Refunds_AmountVnd", "[AmountVnd] > 0");
+
+                            t.HasCheckConstraint("CK_Refunds_Status", "[Status] IN ('Requested','Reserved','Submitted','Succeeded','Failed','NeedsAttention','Rejected')");
+                        });
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.Shipment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Carrier")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<DateTime?>("DeliveredAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<string>("DeliveryEvidenceStorageKey")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("ShippingActualVnd")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("TrackingNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId");
+
+                    b.HasIndex("Carrier", "TrackingNumber")
+                        .IsUnique();
+
+                    b.ToTable("Shipments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Shipments_DeliveredEvidence", "([Status] <> 'Delivered' OR ([DeliveredAtUtc] IS NOT NULL AND [DeliveryEvidenceStorageKey] IS NOT NULL))");
+
+                            t.HasCheckConstraint("CK_Shipments_Status", "[Status] IN ('Created','Shipping','DeliveryFailed','Delivered','Returned','Cancelled')");
+                        });
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.ShipmentEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("EventKey")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<DateTime>("ReceivedAtUtc")
+                        .HasPrecision(3)
+                        .HasColumnType("datetime2(3)");
+
+                    b.Property<Guid>("ShipmentId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("ShipmentId", "EventKey")
+                        .IsUnique();
+
+                    b.ToTable("ShipmentEvents", (string)null);
                 });
 
             modelBuilder.Entity("TheBoys.Domain.Entities.User", b =>
@@ -2375,6 +2973,57 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                     b.Navigation("Version");
                 });
 
+            modelBuilder.Entity("TheBoys.Domain.Entities.DefectEvidence", b =>
+                {
+                    b.HasOne("TheBoys.Domain.Entities.DefectReport", "Report")
+                        .WithMany("Evidence")
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Report");
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.DefectReport", b =>
+                {
+                    b.HasOne("TheBoys.Domain.Entities.Order", "Order")
+                        .WithMany("DefectReports")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TheBoys.Domain.Entities.Refund", "Refund")
+                        .WithMany("DefectReports")
+                        .HasForeignKey("RefundId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TheBoys.Domain.Entities.ProductionRun", "ReprintRun")
+                        .WithOne("DefectReportReprint")
+                        .HasForeignKey("TheBoys.Domain.Entities.DefectReport", "ReprintRunId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TheBoys.Domain.Entities.User", "ResolvedByUser")
+                        .WithMany("ResolvedDefectReports")
+                        .HasForeignKey("ResolvedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TheBoys.Domain.Entities.User", "User")
+                        .WithMany("DefectReports")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Refund");
+
+                    b.Navigation("ReprintRun");
+
+                    b.Navigation("ResolvedByUser");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("TheBoys.Domain.Entities.GenerationJob", b =>
                 {
                     b.HasOne("TheBoys.Domain.Entities.ConsentRecord", "InputConsent")
@@ -2499,6 +3148,25 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                     b.Navigation("SourceJob");
                 });
 
+            modelBuilder.Entity("TheBoys.Domain.Entities.Notification", b =>
+                {
+                    b.HasOne("TheBoys.Domain.Entities.OutboxMessage", "OutboxMessage")
+                        .WithMany("Notifications")
+                        .HasForeignKey("OutboxMessageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TheBoys.Domain.Entities.User", "User")
+                        .WithMany("Notifications")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("OutboxMessage");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("TheBoys.Domain.Entities.Order", b =>
                 {
                     b.HasOne("TheBoys.Domain.Entities.GenerationTask", "GenerationTask")
@@ -2538,6 +3206,39 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("TheBoys.Domain.Entities.OrderCancellationRequest", b =>
+                {
+                    b.HasOne("TheBoys.Domain.Entities.User", "DecidedByUser")
+                        .WithMany()
+                        .HasForeignKey("DecidedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TheBoys.Domain.Entities.Order", "Order")
+                        .WithMany("CancellationRequests")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TheBoys.Domain.Entities.Refund", "Refund")
+                        .WithMany("CancellationRequests")
+                        .HasForeignKey("RefundId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TheBoys.Domain.Entities.User", "RequestedByUser")
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("DecidedByUser");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("Refund");
+
+                    b.Navigation("RequestedByUser");
+                });
+
             modelBuilder.Entity("TheBoys.Domain.Entities.OrderItem", b =>
                 {
                     b.HasOne("TheBoys.Domain.Entities.Order", "Order")
@@ -2573,6 +3274,33 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                     b.Navigation("ActorUser");
 
                     b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.PartnerAssignment", b =>
+                {
+                    b.HasOne("TheBoys.Domain.Entities.User", "AssignedByUser")
+                        .WithMany("AssignedPartnerAssignments")
+                        .HasForeignKey("AssignedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TheBoys.Domain.Entities.Order", "Order")
+                        .WithMany("PartnerAssignments")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TheBoys.Domain.Entities.PartnerLab", "PartnerLab")
+                        .WithMany("PartnerAssignments")
+                        .HasForeignKey("PartnerLabId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AssignedByUser");
+
+                    b.Navigation("Order");
+
+                    b.Navigation("PartnerLab");
                 });
 
             modelBuilder.Entity("TheBoys.Domain.Entities.PartnerLab", b =>
@@ -2637,6 +3365,35 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                     b.Navigation("Version");
                 });
 
+            modelBuilder.Entity("TheBoys.Domain.Entities.PrivacyRequest", b =>
+                {
+                    b.HasOne("TheBoys.Domain.Entities.User", "HandledByUser")
+                        .WithMany("HandledPrivacyRequests")
+                        .HasForeignKey("HandledByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TheBoys.Domain.Entities.User", "User")
+                        .WithMany("PrivacyRequests")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("HandledByUser");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.ProductionRun", b =>
+                {
+                    b.HasOne("TheBoys.Domain.Entities.PartnerAssignment", "Assignment")
+                        .WithMany("ProductionRuns")
+                        .HasForeignKey("AssignmentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Assignment");
+                });
+
             modelBuilder.Entity("TheBoys.Domain.Entities.Quote", b =>
                 {
                     b.HasOne("TheBoys.Domain.Entities.CustomerApproval", "Approval")
@@ -2698,6 +3455,66 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("TheBoys.Domain.Entities.Refund", b =>
+                {
+                    b.HasOne("TheBoys.Domain.Entities.User", "ApprovedByUser")
+                        .WithMany()
+                        .HasForeignKey("ApprovedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TheBoys.Domain.Entities.PaymentAttempt", "PaymentAttempt")
+                        .WithMany("Refunds")
+                        .HasForeignKey("PaymentAttemptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("TheBoys.Domain.Entities.User", "RequestedByUser")
+                        .WithMany()
+                        .HasForeignKey("RequestedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ApprovedByUser");
+
+                    b.Navigation("PaymentAttempt");
+
+                    b.Navigation("RequestedByUser");
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.Shipment", b =>
+                {
+                    b.HasOne("TheBoys.Domain.Entities.Order", "Order")
+                        .WithMany("Shipments")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.ShipmentEvent", b =>
+                {
+                    b.HasOne("TheBoys.Domain.Entities.User", "ActorUser")
+                        .WithMany("ShipmentEvents")
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("TheBoys.Domain.Entities.Shipment", "Shipment")
+                        .WithMany("Events")
+                        .HasForeignKey("ShipmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ActorUser");
+
+                    b.Navigation("Shipment");
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.DefectReport", b =>
+                {
+                    b.Navigation("Evidence");
+                });
+
             modelBuilder.Entity("TheBoys.Domain.Entities.GenerationJob", b =>
                 {
                     b.Navigation("ProducedVersions");
@@ -2729,23 +3546,50 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("TheBoys.Domain.Entities.Order", b =>
                 {
+                    b.Navigation("CancellationRequests");
+
+                    b.Navigation("DefectReports");
+
                     b.Navigation("Items");
+
+                    b.Navigation("PartnerAssignments");
 
                     b.Navigation("PaymentAttempts");
 
                     b.Navigation("Payments");
 
+                    b.Navigation("Shipments");
+
                     b.Navigation("StatusHistories");
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.OutboxMessage", b =>
+                {
+                    b.Navigation("Notifications");
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.PartnerAssignment", b =>
+                {
+                    b.Navigation("ProductionRuns");
                 });
 
             modelBuilder.Entity("TheBoys.Domain.Entities.PartnerLab", b =>
                 {
                     b.Navigation("Orders");
+
+                    b.Navigation("PartnerAssignments");
                 });
 
             modelBuilder.Entity("TheBoys.Domain.Entities.PaymentAttempt", b =>
                 {
                     b.Navigation("Events");
+
+                    b.Navigation("Refunds");
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.ProductionRun", b =>
+                {
+                    b.Navigation("DefectReportReprint");
                 });
 
             modelBuilder.Entity("TheBoys.Domain.Entities.Quote", b =>
@@ -2753,27 +3597,53 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                     b.Navigation("Order");
                 });
 
+            modelBuilder.Entity("TheBoys.Domain.Entities.Refund", b =>
+                {
+                    b.Navigation("CancellationRequests");
+
+                    b.Navigation("DefectReports");
+                });
+
+            modelBuilder.Entity("TheBoys.Domain.Entities.Shipment", b =>
+                {
+                    b.Navigation("Events");
+                });
+
             modelBuilder.Entity("TheBoys.Domain.Entities.User", b =>
                 {
+                    b.Navigation("AssignedPartnerAssignments");
+
                     b.Navigation("ConsentRecords");
 
                     b.Navigation("CreditAccount");
 
                     b.Navigation("CustomerApprovals");
 
+                    b.Navigation("DefectReports");
+
                     b.Navigation("GenerationTasks");
+
+                    b.Navigation("HandledPrivacyRequests");
 
                     b.Navigation("IdentityTokens");
 
                     b.Navigation("LedgerEntries");
 
+                    b.Navigation("Notifications");
+
                     b.Navigation("Orders");
 
                     b.Navigation("PrintReviews");
 
+                    b.Navigation("PrivacyRequests");
+
                     b.Navigation("Quotes");
 
                     b.Navigation("RefreshSessions");
+
+                    b.Navigation("ResolvedDefectReports");
+
+                    b.Navigation("ShipmentEvents");
                 });
 #pragma warning restore 612, 618
         }

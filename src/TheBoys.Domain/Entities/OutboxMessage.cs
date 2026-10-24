@@ -16,6 +16,9 @@ public sealed class OutboxMessage : BaseEntity
     public DateTime? DeadLetteredAtUtc { get; private set; }
     public DateTime CreatedAtUtc { get; private set; }
 
+    // Navigation
+    public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+
     private OutboxMessage() { }
 
     public static OutboxMessage Create(
@@ -39,11 +42,34 @@ public sealed class OutboxMessage : BaseEntity
         };
     }
 
+    public void AcquireLease(string leaseOwner, DateTime leaseExpiresAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(leaseOwner)) throw new ArgumentException("LeaseOwner không được rỗng.", nameof(leaseOwner));
+        LeaseOwner = leaseOwner.Trim();
+        LeaseExpiresAtUtc = leaseExpiresAtUtc;
+    }
+
     public void MarkProcessed(DateTime utcNow)
     {
         ProcessedAtUtc = utcNow;
         LeaseOwner = null;
         LeaseExpiresAtUtc = null;
     }
-}
 
+    public void RecordFailure(DateTime utcNow, int maxAttempts = 5, int baseDelaySeconds = 15)
+    {
+        AttemptCount++;
+        LeaseOwner = null;
+        LeaseExpiresAtUtc = null;
+
+        if (AttemptCount >= maxAttempts)
+        {
+            DeadLetteredAtUtc = utcNow;
+        }
+        else
+        {
+            var delaySeconds = baseDelaySeconds * Math.Pow(2, AttemptCount - 1);
+            AvailableAtUtc = utcNow.AddSeconds(delaySeconds);
+        }
+    }
+}
