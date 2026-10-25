@@ -161,7 +161,36 @@ public sealed class OrdersV2Controller(ISender mediator, IApplicationDbContext d
         [FromBody] CancelOrderV2ApiRequest request,
         CancellationToken ct)
     {
-        var command = new CancelOrderV2Command(id, UserId, request.Reason, IsManagement, request.DecisionNote);
+        var isManagement = IsManagement;
+
+        if (User.IsInRole(Roles.Manager))
+        {
+            var targetOrder = await db.Orders
+                .AsNoTracking()
+                .Select(o => new { o.Id, o.UserId, o.OrderPaymentStatus })
+                .SingleOrDefaultAsync(o => o.Id == id, ct);
+
+            if (targetOrder != null)
+            {
+                var isUnpaid = string.Equals(targetOrder.OrderPaymentStatus, "Unpaid", StringComparison.OrdinalIgnoreCase);
+                if (targetOrder.UserId != UserId)
+                {
+                    if (!isUnpaid)
+                    {
+                        return Forbid();
+                    }
+                }
+                else
+                {
+                    if (!isUnpaid)
+                    {
+                        isManagement = false;
+                    }
+                }
+            }
+        }
+
+        var command = new CancelOrderV2Command(id, UserId, request.Reason, isManagement, request.DecisionNote);
         var result = await mediator.Send(command, ct);
 
         if (result.IsFailure)
@@ -179,6 +208,11 @@ public sealed class OrdersV2Controller(ISender mediator, IApplicationDbContext d
         [FromBody] ReviewCancellationRequestApiRequest request,
         CancellationToken ct)
     {
+        if (User.IsInRole(Roles.Manager) && request.Approved)
+        {
+            return Forbid();
+        }
+
         var command = new ReviewCancellationRequestCommand(
             RequestId: requestId,
             DecidedByUserId: UserId,

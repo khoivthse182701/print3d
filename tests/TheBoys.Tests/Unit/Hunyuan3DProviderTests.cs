@@ -55,23 +55,23 @@ public class Hunyuan3DProviderTests
     }
 
     [Fact]
-    public void SignTc3Request_MatchesOfficialTencentTestVector()
+    public void SignTc3Request_MatchesDeterministicSigningFixture()
     {
-        // Official Tencent Cloud TC3-HMAC-SHA256 test vector
+        // Deterministic signing fixture for Tencent Cloud TC3-HMAC-SHA256
         var (request, auth, stringToSign, canonicalRequest) = Hunyuan3DProvider.SignTc3Request(
             baseUrl: "https://cvm.tencentcloudapi.com",
             action: "DescribeInstances",
             service: "cvm",
             version: "2017-03-12",
             region: "ap-guangzhou",
-            secretId: "",
-            secretKey: "",
+            secretId: "AKID_MOCK_SECRET_ID_FOR_TC3_TESTING",
+            secretKey: "MOCK_SECRET_KEY_FOR_TC3_TESTING",
             jsonPayload: "{\"Limit\": 1, \"Filters\": [{\"Values\": [\"aurCode-150240\"], \"Name\": \"zone\"}]}",
             timestamp: 1551113065);
 
         Assert.Contains("content-type;host;x-tc-action", canonicalRequest);
         Assert.Contains("2019-02-25/cvm/tc3_request", stringToSign);
-        var expectedCredentialPrefix = "TC3-HMAC-SHA256 Credential=" + "AKID" + "z8krbsJ5yKBZQpn74WFkmLPx3gnPhYrD" + "/2019-02-25/cvm/tc3_request, SignedHeaders=content-type;host;x-tc-action, Signature=";
+        var expectedCredentialPrefix = "TC3-HMAC-SHA256 Credential=AKID_MOCK_SECRET_ID_FOR_TC3_TESTING/2019-02-25/cvm/tc3_request, SignedHeaders=content-type;host;x-tc-action, Signature=";
         Assert.StartsWith(expectedCredentialPrefix, auth);
         Assert.NotNull(request.Content);
     }

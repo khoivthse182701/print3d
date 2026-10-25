@@ -10,7 +10,7 @@ foreach ($file in $files) {
     $content = Get-Content -LiteralPath $file.FullName -Raw -Encoding utf8
     foreach ($match in [regex]::Matches($content, '\[[^\]]*\]\(([^)]+)\)')) {
         $target = $match.Groups[1].Value.Trim('<','>')
-        if ($target -match '^(https?://|mailto:|#|file:)') { continue }
+        if ($target -match '^(https?://|mailto:|#)') { continue }
         $target = [uri]::UnescapeDataString(($target -split '#')[0])
         if (-not $target) { continue }
         $resolved = [IO.Path]::GetFullPath((Join-Path $file.DirectoryName $target))

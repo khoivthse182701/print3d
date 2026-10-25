@@ -681,6 +681,299 @@ public class ManagerRoleFlowTests(DemoFactory factory) : IClassFixture<DemoFacto
         Assert.Equal(HttpStatusCode.Created, staffRefundRes.StatusCode);
     }
 
+    [Fact]
+    public async Task AC08_ManagerPaidOrderCancellationAndReviewGuards()
+    {
+        using var customer = await factory.Client(factory.CustomerId);
+        using var manager = await factory.Client(factory.ManagerId);
+        using var staff = await factory.Client(factory.StaffId);
+
+        var testAmount = 300000m;
+
+        // 1. Setup: Customer has a paid order in "Printing" fulfillment status
+        Order paidOrder;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            paidOrder = new Order
+            {
+                Id = Guid.NewGuid(),
+                OrderCode = $"TB-PD-{Guid.NewGuid():N}",
+                UserId = factory.CustomerId,
+                QuoteId = null,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                Status = OrderStatus.Printing,
+                FulfillmentStatus = "Printing",
+                OrderPaymentStatus = "Paid",
+                Currency = "VND",
+                Quantity = 1,
+                UnitPriceSnapshot = testAmount,
+                PartnerCostSnapshot = 120000m,
+                SubTotalVnd = testAmount,
+                ShippingFeeRaw = 0,
+                FinalShippingFee = 0,
+                TotalAmount = testAmount,
+                ReceiverName = "Paid Customer",
+                ReceiverPhone = "0901234567",
+                StreetAddress = "123 Le Loi",
+                District = "District 1",
+                City = "Ho Chi Minh",
+                PrintingStartedAtUtc = DateTime.UtcNow,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Orders.Add(paidOrder);
+
+            var attempt = PaymentAttempt.Create(paidOrder.Id, "Sandbox", $"REF-PAID-{Guid.NewGuid():N}", testAmount, "VND", DateTime.UtcNow.AddMinutes(30), DateTime.UtcNow);
+            attempt.MarkSucceeded($"TX-PAID-{Guid.NewGuid():N}", DateTime.UtcNow);
+            db.PaymentAttempts.Add(attempt);
+
+            await db.SaveChangesAsync();
+        }
+
+        // SCENARIO 1: Manager calls POST /api/v2/orders/{id}/cancel on another user's paid order
+        // Expected: 403 Forbidden before any mutation
+        var mgrCancelPaidRes = await manager.PostAsJsonAsync($"/api/v2/orders/{paidOrder.Id}/cancel", new
+        {
+            reason = "Manager attempting unauthorized paid cancellation",
+            decisionNote = "Manager note"
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, mgrCancelPaidRes.StatusCode);
+
+        // SQL Verification: No status change, no refund pending, no history, no outbox
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var dbOrder = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == paidOrder.Id);
+            Assert.Equal("Paid", dbOrder.OrderPaymentStatus);
+            Assert.Equal("Printing", dbOrder.FulfillmentStatus);
+            Assert.Equal(OrderStatus.Printing, dbOrder.Status);
+            Assert.Null(dbOrder.CancelledAtUtc);
+
+            var requests = await db.OrderCancellationRequests.AsNoTracking().Where(c => c.OrderId == paidOrder.Id).ToListAsync();
+            Assert.Empty(requests);
+
+            var histories = await db.OrderStatusHistories.AsNoTracking()
+                .Where(h => h.OrderId == paidOrder.Id && h.Axis == "Payment")
+                .ToListAsync();
+            Assert.Empty(histories);
+
+            var outboxMessages = await db.OutboxMessages.AsNoTracking()
+                .Where(m => m.AggregateId == paidOrder.Id && (m.EventType == "OrderCancelled" || m.EventType == "OrderCancellationApproved"))
+                .ToListAsync();
+            Assert.Empty(outboxMessages);
+        }
+
+        // 2. Setup: Customer requests cancellation on an eligible paid order (e.g. before production)
+        Order customerAwaitingOrder;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            customerAwaitingOrder = new Order
+            {
+                Id = Guid.NewGuid(),
+                OrderCode = $"TB-AW-{Guid.NewGuid():N}",
+                UserId = factory.CustomerId,
+                QuoteId = null,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                Status = OrderStatus.Draft,
+                FulfillmentStatus = "AwaitingAssignment",
+                OrderPaymentStatus = "Paid",
+                Currency = "VND",
+                Quantity = 1,
+                UnitPriceSnapshot = testAmount,
+                PartnerCostSnapshot = 120000m,
+                SubTotalVnd = testAmount,
+                ShippingFeeRaw = 0,
+                FinalShippingFee = 0,
+                TotalAmount = testAmount,
+                ReceiverName = "Paid Customer",
+                ReceiverPhone = "0901234567",
+                StreetAddress = "123 Le Loi",
+                District = "District 1",
+                City = "Ho Chi Minh",
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Orders.Add(customerAwaitingOrder);
+
+            var attempt = PaymentAttempt.Create(customerAwaitingOrder.Id, "Sandbox", $"REF-AWAIT-{Guid.NewGuid():N}", testAmount, "VND", DateTime.UtcNow.AddMinutes(30), DateTime.UtcNow);
+            attempt.MarkSucceeded($"TX-AWAIT-{Guid.NewGuid():N}", DateTime.UtcNow);
+            db.PaymentAttempts.Add(attempt);
+
+            await db.SaveChangesAsync();
+        }
+
+        // Customer requests cancellation -> returns 200 OK with PendingReview
+        var cusCancelRes = await customer.PostAsJsonAsync($"/api/v2/orders/{customerAwaitingOrder.Id}/cancel", new
+        {
+            reason = "Customer changed mind before printing begins"
+        });
+        Assert.Equal(HttpStatusCode.OK, cusCancelRes.StatusCode);
+        var cusCancelJson = await Json(cusCancelRes);
+        Assert.Equal("PendingReview", cusCancelJson.GetProperty("cancellationStatus").GetString());
+        var cancellationRequestId = cusCancelJson.GetProperty("cancellationRequestId").GetGuid();
+
+        // SCENARIO 2: Manager calls POST /api/v2/orders/cancellation-requests/{id}/review with Approved = true
+        // Expected: 403 Forbidden
+        var mgrReviewRes = await manager.PostAsJsonAsync($"/api/v2/orders/cancellation-requests/{cancellationRequestId}/review", new
+        {
+            approved = true,
+            decisionNote = "Manager trying to approve refund"
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, mgrReviewRes.StatusCode);
+
+        // SQL Verification: Request remains Pending, payment status still Paid, fulfillment unchanged
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var cancelReq = await db.OrderCancellationRequests.AsNoTracking().SingleAsync(c => c.Id == cancellationRequestId);
+            Assert.Equal(CancellationRequestStatus.Pending, cancelReq.Status);
+
+            var dbOrder = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == customerAwaitingOrder.Id);
+            Assert.Equal("Paid", dbOrder.OrderPaymentStatus);
+            Assert.Equal("AwaitingAssignment", dbOrder.FulfillmentStatus);
+
+            var paymentHistories = await db.OrderStatusHistories.AsNoTracking()
+                .Where(h => h.OrderId == customerAwaitingOrder.Id && h.Axis == "Payment")
+                .ToListAsync();
+            Assert.Empty(paymentHistories);
+
+            var approvedOutbox = await db.OutboxMessages.AsNoTracking()
+                .Where(m => m.AggregateId == customerAwaitingOrder.Id && m.EventType == "OrderCancellationApproved")
+                .ToListAsync();
+            Assert.Empty(approvedOutbox);
+        }
+
+        // SCENARIO 3: Manager operational capability - Manager CAN cancel an unpaid order
+        Order unpaidOrder;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            unpaidOrder = new Order
+            {
+                Id = Guid.NewGuid(),
+                OrderCode = $"TB-UP-{Guid.NewGuid():N}",
+                UserId = factory.CustomerId,
+                QuoteId = null,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                Status = OrderStatus.Draft,
+                FulfillmentStatus = "PendingPayment",
+                OrderPaymentStatus = "Unpaid",
+                Currency = "VND",
+                Quantity = 1,
+                UnitPriceSnapshot = testAmount,
+                PartnerCostSnapshot = 120000m,
+                SubTotalVnd = testAmount,
+                ShippingFeeRaw = 0,
+                FinalShippingFee = 0,
+                TotalAmount = testAmount,
+                ReceiverName = "Unpaid Customer",
+                ReceiverPhone = "0901234567",
+                StreetAddress = "123 Le Loi",
+                District = "District 1",
+                City = "Ho Chi Minh",
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Orders.Add(unpaidOrder);
+            await db.SaveChangesAsync();
+        }
+
+        var mgrCancelUnpaidRes = await manager.PostAsJsonAsync($"/api/v2/orders/{unpaidOrder.Id}/cancel", new
+        {
+            reason = "Manager operational cleanup of abandoned unpaid order"
+        });
+        Assert.Equal(HttpStatusCode.OK, mgrCancelUnpaidRes.StatusCode);
+        var unpaidJson = await Json(mgrCancelUnpaidRes);
+        Assert.Equal("CancelledDirectly", unpaidJson.GetProperty("cancellationStatus").GetString());
+        Assert.False(unpaidJson.GetProperty("refundRequired").GetBoolean());
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var dbOrder = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == unpaidOrder.Id);
+            Assert.Equal("Cancelled", dbOrder.FulfillmentStatus);
+            Assert.Equal("Unpaid", dbOrder.OrderPaymentStatus);
+            Assert.Equal(OrderStatus.Cancelled, dbOrder.Status);
+        }
+
+        // SCENARIO 4: Manager cancelling own personal paid order submits Pending request without auto-approving
+        Order managerOwnOrder;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            managerOwnOrder = new Order
+            {
+                Id = Guid.NewGuid(),
+                OrderCode = $"TB-MO-{Guid.NewGuid():N}",
+                UserId = factory.ManagerId,
+                QuoteId = null,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                Status = OrderStatus.Draft,
+                FulfillmentStatus = "AwaitingAssignment",
+                OrderPaymentStatus = "Paid",
+                Currency = "VND",
+                Quantity = 1,
+                UnitPriceSnapshot = testAmount,
+                PartnerCostSnapshot = 120000m,
+                SubTotalVnd = testAmount,
+                ShippingFeeRaw = 0,
+                FinalShippingFee = 0,
+                TotalAmount = testAmount,
+                ReceiverName = "Manager Personal",
+                ReceiverPhone = "0909998877",
+                StreetAddress = "456 Nguyen Thi Minh Khai",
+                District = "District 3",
+                City = "Ho Chi Minh",
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Orders.Add(managerOwnOrder);
+
+            var attempt = PaymentAttempt.Create(managerOwnOrder.Id, "Sandbox", $"REF-MGR-{Guid.NewGuid():N}", testAmount, "VND", DateTime.UtcNow.AddMinutes(30), DateTime.UtcNow);
+            attempt.MarkSucceeded($"TX-MGR-{Guid.NewGuid():N}", DateTime.UtcNow);
+            db.PaymentAttempts.Add(attempt);
+
+            await db.SaveChangesAsync();
+        }
+
+        var mgrOwnCancelRes = await manager.PostAsJsonAsync($"/api/v2/orders/{managerOwnOrder.Id}/cancel", new
+        {
+            reason = "Manager customer changed mind on personal order"
+        });
+        Assert.Equal(HttpStatusCode.OK, mgrOwnCancelRes.StatusCode);
+        var mgrOwnJson = await Json(mgrOwnCancelRes);
+        Assert.Equal("PendingReview", mgrOwnJson.GetProperty("cancellationStatus").GetString());
+        Assert.True(mgrOwnJson.GetProperty("refundRequired").GetBoolean());
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var dbOrder = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == managerOwnOrder.Id);
+            Assert.Equal("Paid", dbOrder.OrderPaymentStatus);
+            Assert.Equal("AwaitingAssignment", dbOrder.FulfillmentStatus);
+            var ownReq = await db.OrderCancellationRequests.AsNoTracking().SingleAsync(c => c.OrderId == managerOwnOrder.Id);
+            Assert.Equal(CancellationRequestStatus.Pending, ownReq.Status);
+        }
+
+        // SCENARIO 5: Staff baseline intact - Staff CAN approve cancellation request
+        var staffApproveRes = await staff.PostAsJsonAsync($"/api/v2/orders/cancellation-requests/{cancellationRequestId}/review", new
+        {
+            approved = true,
+            decisionNote = "Staff approved customer cancellation for refund"
+        });
+        Assert.Equal(HttpStatusCode.OK, staffApproveRes.StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var cancelReq = await db.OrderCancellationRequests.AsNoTracking().SingleAsync(c => c.Id == cancellationRequestId);
+            Assert.Equal(CancellationRequestStatus.Approved, cancelReq.Status);
+
+            var dbOrder = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == customerAwaitingOrder.Id);
+            Assert.Equal("RefundPending", dbOrder.OrderPaymentStatus);
+            Assert.Equal("Cancelled", dbOrder.FulfillmentStatus);
+            Assert.Equal(OrderStatus.Cancelled, dbOrder.Status);
+        }
+    }
+
     private async Task<Guid> NewCustomer(int credits = 10)
     {
         using var scope = factory.Services.CreateScope();
