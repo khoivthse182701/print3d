@@ -30,6 +30,7 @@ public sealed class CreateGenerationTaskCommandHandler(
     ICreditService creditService,
     IConsentService consentService,
     IImageValidationService imageValidationService,
+    IContentModerationService contentModerationService,
     IClock clock) : IRequestHandler<CreateGenerationTaskCommand, Result<CreateGenerationTaskResult>>
 {
     public async Task<Result<CreateGenerationTaskResult>> Handle(CreateGenerationTaskCommand request, CancellationToken ct)
@@ -71,6 +72,13 @@ public sealed class CreateGenerationTaskCommandHandler(
         var validationResult = imageValidationService.ValidateImage(request.ImageData, request.MimeType);
         if (validationResult.IsFailure)
             return Result<CreateGenerationTaskResult>.Failure(validationResult.Error);
+
+        // Anti-NSFW Guard: Prompt text and image content moderation
+        if (!contentModerationService.IsContentSafe(request.ModelName, request.ImageData))
+        {
+            return Result<CreateGenerationTaskResult>.Failure(
+                Error.Custom(422, "NSFW_CONTENT_BLOCKED", "Nội dung hình ảnh hoặc từ khóa vi phạm tiêu chuẩn kiểm duyệt (nhạy cảm, bạo lực hoặc 18+)."));
+        }
 
         // Quick balance check before heavy storage operations
         var balance = await creditService.GetBalanceAsync(request.UserId, ct);

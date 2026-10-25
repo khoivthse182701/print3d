@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using TheBoys.WebApi.Security;
 
@@ -21,6 +22,8 @@ public abstract class ApiControllerBase : ControllerBase
         TheBoys.Application.Common.Models.ErrorType.PaymentRequired => StatusCode(StatusCodes.Status402PaymentRequired, new { message = error.Message }),
         TheBoys.Application.Common.Models.ErrorType.ServiceUnavailable => StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = error.Message }),
         TheBoys.Application.Common.Models.ErrorType.BadGateway => StatusCode(StatusCodes.Status502BadGateway, new { message = error.Message }),
+        TheBoys.Application.Common.Models.ErrorType.UnprocessableEntity => StatusCode(StatusCodes.Status422UnprocessableEntity, new { code = error.Code, message = error.Message }),
+        TheBoys.Application.Common.Models.ErrorType.Custom when error.CustomStatusCode.HasValue => StatusCode(error.CustomStatusCode.Value, new { code = error.Code, message = error.Message }),
         _ => StatusCode(StatusCodes.Status500InternalServerError, new { message = error.Message })
     };
 }

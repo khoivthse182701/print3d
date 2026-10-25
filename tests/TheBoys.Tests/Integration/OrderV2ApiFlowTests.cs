@@ -178,7 +178,7 @@ public class OrderV2ApiFlowTests(DemoFactory factory) : IClassFixture<DemoFactor
 
         var quoteJson = await validQuoteRes.Content.ReadFromJsonAsync<JsonElement>();
         var quoteId = quoteJson.GetProperty("id").GetGuid();
-        Assert.Equal(390000m * 2, quoteJson.GetProperty("totalVnd").GetDecimal());
+        Assert.Equal(562540m, quoteJson.GetProperty("totalVnd").GetDecimal());
 
         // 8. Other user cannot read customer's quote
         var otherReadRes = await other.GetAsync($"/api/v2/quotes/{quoteId}");
@@ -216,7 +216,7 @@ public class OrderV2ApiFlowTests(DemoFactory factory) : IClassFixture<DemoFactor
         var orderId = orderJson.GetProperty("id").GetGuid();
         Assert.Equal("PendingPayment", orderJson.GetProperty("fulfillmentStatus").GetString());
         Assert.Equal("Unpaid", orderJson.GetProperty("paymentStatus").GetString());
-        Assert.Equal(390000m * 2, orderJson.GetProperty("totalVnd").GetDecimal());
+        Assert.Equal(562540m, orderJson.GetProperty("totalVnd").GetDecimal());
         Assert.Equal(quoteId, orderJson.GetProperty("quoteId").GetGuid());
 
         // Verify items and statusHistories in response

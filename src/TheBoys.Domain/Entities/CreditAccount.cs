@@ -14,7 +14,7 @@ public sealed class CreditAccount
 
     private CreditAccount() { }
 
-    public static CreditAccount Create(Guid userId, int trialBalance = 2, int purchasedBalance = 0)
+    public static CreditAccount Create(Guid userId, int trialBalance = 1, int purchasedBalance = 0)
     {
         if (trialBalance < 0) throw new ArgumentOutOfRangeException(nameof(trialBalance), "Trial balance không được âm.");
         if (purchasedBalance < 0) throw new ArgumentOutOfRangeException(nameof(purchasedBalance), "Purchased balance không được âm.");

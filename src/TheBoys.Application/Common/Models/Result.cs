@@ -1,6 +1,6 @@
 namespace TheBoys.Application.Common.Models;
 
-public record Error(string Code, string Message, ErrorType Type = ErrorType.Failure, object? Extra = null)
+public record Error(string Code, string Message, ErrorType Type = ErrorType.Failure, object? Extra = null, int? CustomStatusCode = null)
 {
     public static readonly Error None = new(string.Empty, string.Empty, ErrorType.Failure);
     public static Error Validation(string code, string message) => new(code, message, ErrorType.Validation);
@@ -11,6 +11,8 @@ public record Error(string Code, string Message, ErrorType Type = ErrorType.Fail
     public static Error ServiceUnavailable(string code, string message) => new(code, message, ErrorType.ServiceUnavailable);
     public static Error BadGateway(string code, string message) => new(code, message, ErrorType.BadGateway);
     public static Error Failure(string code, string message) => new(code, message, ErrorType.Failure);
+    public static Error Custom(int statusCode, string code, string message) => new(code, message, ErrorType.Custom, CustomStatusCode: statusCode);
+    public static Error UnprocessableEntity(string code, string message) => new(code, message, ErrorType.UnprocessableEntity, CustomStatusCode: 422);
 }
 
 public enum ErrorType
@@ -22,7 +24,9 @@ public enum ErrorType
     Unauthorized,
     PaymentRequired,
     ServiceUnavailable,
-    BadGateway
+    BadGateway,
+    UnprocessableEntity,
+    Custom
 }
 
 public class Result

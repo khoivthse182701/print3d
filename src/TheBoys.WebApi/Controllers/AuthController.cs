@@ -116,15 +116,15 @@ public sealed class AuthController(
         };
         user.PasswordHash = hasher.HashPassword(user, request.Password);
 
-        var creditAccount = CreditAccount.Create(user.Id, trialBalance: 2, purchasedBalance: 0);
+        var creditAccount = CreditAccount.Create(user.Id, trialBalance: 1, purchasedBalance: 0);
         user.CreditAccount = creditAccount;
 
         var ledgerEntry = CreditLedgerEntry.CreateTrialGrant(
             user.Id,
-            2,
+            1,
             $"register:trial:{user.Id}",
             null,
-            "Khởi tạo tài khoản dùng thử 2 lượt tạo 3D",
+            "Khởi tạo tài khoản dùng thử 1 lượt tạo 3D",
             clock.UtcNow);
 
         // Generate email verification OTP code (hash stored only)

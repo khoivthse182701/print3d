@@ -139,6 +139,7 @@ public sealed class ModelProviderRegistry : IModelProviderRegistry
             || string.Equals(providerKey, "Hunyuan", StringComparison.OrdinalIgnoreCase)
             || string.Equals(providerKey, "Tencent", StringComparison.OrdinalIgnoreCase)
             || string.Equals(providerKey, "hy3d", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(providerKey, "pro", StringComparison.OrdinalIgnoreCase)
             || string.Equals(providerKey, _hunyuanOptions.Value.DefaultEngine, StringComparison.OrdinalIgnoreCase))
         {
             var isExplicitlyDisabled = string.Equals(_configuration["AiProviders:Hunyuan3D:EnabledForNewJobs"], "false", StringComparison.OrdinalIgnoreCase);

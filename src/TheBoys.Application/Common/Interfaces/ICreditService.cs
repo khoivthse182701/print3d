@@ -13,6 +13,6 @@ public interface ICreditService
     Task<Result<CreditDebitReceipt>> DebitForGenerationAsync(Guid userId, Guid generationTaskId, string operationKey, CancellationToken ct);
     Task<Result<CreditRefundReceipt>> RefundForGenerationAsync(Guid userId, Guid generationTaskId, string operationKey, CancellationToken ct);
     Task<Result<CreditGrantReceipt>> AdminGrantAsync(Guid targetUserId, Guid adminUserId, int amount, string reason, string idempotencyKey, CancellationToken ct);
+    Task<Result<CreditGrantReceipt>> AddPurchasedCreditsAsync(Guid userId, int amount, string operationKey, string reason, CancellationToken ct);
     Task<CreditBalanceDto> GetBalanceAsync(Guid userId, CancellationToken ct);
 }
-

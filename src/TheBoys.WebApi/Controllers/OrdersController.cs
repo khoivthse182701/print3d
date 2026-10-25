@@ -34,6 +34,7 @@ public sealed class UpdateOrderStatusRequest
     [MaxLength(100)] public string? TrackingNumber { get; set; }
 }
 
+[Obsolete("Use OrdersV2Controller for enterprise PayOS & quotes flow")]
 [ApiController, Route("api/orders"), Authorize]
 public sealed class OrdersController(ISender mediator) : ApiControllerBase
 {

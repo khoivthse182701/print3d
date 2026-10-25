@@ -14,7 +14,8 @@ namespace TheBoys.Application.Payments.Commands.ProcessPaymentWebhook;
 public sealed class ProcessPaymentWebhookCommandHandler(
     IApplicationDbContext db,
     IPaymentGatewayRegistry gatewayRegistry,
-    IClock clock) : IRequestHandler<ProcessPaymentWebhookCommand, Result<ProcessPaymentWebhookResult>>
+    IClock clock,
+    ICreditService? creditService = null) : IRequestHandler<ProcessPaymentWebhookCommand, Result<ProcessPaymentWebhookResult>>
 {
     public async Task<Result<ProcessPaymentWebhookResult>> Handle(ProcessPaymentWebhookCommand request, CancellationToken ct)
     {
@@ -90,6 +91,111 @@ public sealed class ProcessPaymentWebhookCommandHandler(
                 attempt = pendingAttempts.FirstOrDefault(pa =>
                     pa.MerchantReference.Replace("-", "").StartsWith(cleanRef, StringComparison.OrdinalIgnoreCase) ||
                     cleanRef.StartsWith(pa.MerchantReference.Replace("-", ""), StringComparison.OrdinalIgnoreCase));
+            }
+
+            // Trích xuất description và orderCode từ raw payload để kiểm tra topup
+            string? webhookDesc = null;
+            string? webhookOrderCodeStr = null;
+            try
+            {
+                using var doc = JsonDocument.Parse(request.RawBody);
+                if (doc.RootElement.TryGetProperty("data", out var dataElem))
+                {
+                    if (dataElem.TryGetProperty("description", out var dProp))
+                        webhookDesc = dProp.GetString();
+                    if (dataElem.TryGetProperty("orderCode", out var ocProp))
+                        webhookOrderCodeStr = ocProp.ToString();
+                }
+            }
+            catch { }
+
+            // Bất biến Topup: Nếu orderCode hoặc description bắt đầu bằng TOPUP_, nạp credit cho user
+            var isTopup = (webhookDesc != null && webhookDesc.StartsWith("TOPUP_", StringComparison.OrdinalIgnoreCase)) ||
+                          (webhookOrderCodeStr != null && webhookOrderCodeStr.StartsWith("TOPUP_", StringComparison.OrdinalIgnoreCase)) ||
+                          (verification.MerchantReference != null && verification.MerchantReference.StartsWith("TOPUP_", StringComparison.OrdinalIgnoreCase)) ||
+                          (attempt != null && attempt.MerchantReference.StartsWith("TOPUP_", StringComparison.OrdinalIgnoreCase));
+
+            if (isTopup)
+            {
+                var topupRef = attempt?.MerchantReference ?? webhookDesc ?? verification.MerchantReference ?? "";
+                var parts = topupRef.Split('_');
+                var pkgId = parts.Length > 1 ? parts[1].ToLowerInvariant() : "starter";
+                Guid targetUserId = Guid.Empty;
+                if (parts.Length > 2 && Guid.TryParse(parts[2], out var parsedUid))
+                {
+                    targetUserId = parsedUid;
+                }
+                else if (attempt?.Order != null)
+                {
+                    targetUserId = attempt.Order.UserId;
+                }
+
+                int credits = pkgId switch
+                {
+                    "studio" => 30,
+                    "creator" => 10,
+                    _ => 3
+                };
+                if (verification.AmountVnd >= 290000m) credits = 30;
+                else if (verification.AmountVnd >= 120000m) credits = 10;
+                else if (verification.AmountVnd >= 50000m) credits = 3;
+
+                if (targetUserId != Guid.Empty && string.Equals(verification.EventStatus, "Succeeded", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (creditService != null)
+                    {
+                        var opKey = $"topup:payos:{verification.EventId ?? Guid.NewGuid().ToString("N")}";
+                        await creditService.AddPurchasedCreditsAsync(
+                            targetUserId,
+                            credits,
+                            opKey,
+                            $"Nạp {credits} lượt tạo 3D qua PayOS ({pkgId})",
+                            ct
+                        );
+                    }
+                }
+
+                if (attempt != null)
+                {
+                    if (string.Equals(verification.EventStatus, "Succeeded", StringComparison.OrdinalIgnoreCase))
+                    {
+                        attempt.MarkSucceeded(verification.ProviderTransactionId, verification.EventTimeUtc ?? now);
+                        if (attempt.Order != null)
+                        {
+                            attempt.Order.OrderPaymentStatus = "Paid";
+                            attempt.Order.Status = OrderStatus.Paid;
+                            attempt.Order.PaidAtUtc = now;
+                        }
+                    }
+                    else
+                    {
+                        attempt.MarkFailed(verification.FailureReason ?? "Gateway reported non-success payment.");
+                    }
+                }
+
+                var topupEvent = PaymentEvent.Create(
+                    attempt?.Id ?? Guid.NewGuid(),
+                    gateway.GatewayName,
+                    verification.EventId ?? Guid.NewGuid().ToString("N"),
+                    payloadHash,
+                    verification.EventTimeUtc ?? now,
+                    now
+                );
+                topupEvent.MarkProcessed(
+                    PaymentEventProcessingResult.Applied,
+                    now,
+                    $"Xử lý thành công nạp {credits} credits qua PayOS."
+                );
+                db.PaymentEvents.Add(topupEvent);
+
+                await db.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+
+                return Result<ProcessPaymentWebhookResult>.Success(new(
+                    Acknowledged: true,
+                    Message: $"Top-up webhook processed. Granted {credits} credits.",
+                    ProcessingResult: "Applied"
+                ));
             }
 
             if (attempt == null)
