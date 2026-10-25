@@ -269,9 +269,9 @@ public sealed class PayOSPaymentGateway(
 
             var isSuccess = string.Equals(code, "00", StringComparison.OrdinalIgnoreCase);
             var eventStatus = isSuccess ? "Succeeded" : "Failed";
-            var eventId = reference ?? orderCode?.ToString() ?? Guid.NewGuid().ToString("N");
+            var eventId = orderCode?.ToString() ?? reference ?? Guid.NewGuid().ToString("N");
             var merchantRef = description ?? orderCode?.ToString() ?? "";
-            var providerTxId = paymentLinkId ?? reference ?? orderCode?.ToString();
+            var providerTxId = reference ?? paymentLinkId ?? orderCode?.ToString();
 
             return Task.FromResult(new WebhookVerificationResult(
                 IsValid: true,

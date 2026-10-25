@@ -10,22 +10,34 @@ public sealed class ModelProviderRegistry : IModelProviderRegistry
     private readonly IConfiguration _configuration;
     private readonly IOptions<MeshyOptions> _meshyOptions;
     private readonly IOptions<TripoOptions> _tripoOptions;
+    private readonly IOptions<Hunyuan3DOptions> _hunyuanOptions;
 
     public ModelProviderRegistry(
         MeshyProvider meshy,
         TripoProvider tripo,
+        Hunyuan3DProvider hunyuan,
         IConfiguration configuration,
         IOptions<MeshyOptions> meshyOptions,
-        IOptions<TripoOptions> tripoOptions)
+        IOptions<TripoOptions> tripoOptions,
+        IOptions<Hunyuan3DOptions> hunyuanOptions)
     {
         _providers = new Dictionary<string, IModelGenerationProvider>(StringComparer.OrdinalIgnoreCase)
         {
             [meshy.Name] = meshy,
-            [tripo.Name] = tripo
+            [tripo.Name] = tripo,
+            [hunyuan.Name] = hunyuan,
+            ["Hunyuan"] = hunyuan,
+            ["Tencent"] = hunyuan,
+            ["hy3d"] = hunyuan
         };
+        if (!string.IsNullOrWhiteSpace(hunyuan.Model) && !_providers.ContainsKey(hunyuan.Model))
+        {
+            _providers[hunyuan.Model] = hunyuan;
+        }
         _configuration = configuration;
         _meshyOptions = meshyOptions;
         _tripoOptions = tripoOptions;
+        _hunyuanOptions = hunyuanOptions;
     }
 
     public IModelGenerationProvider Resolve(string providerKey)
@@ -122,9 +134,35 @@ public sealed class ModelProviderRegistry : IModelProviderRegistry
             );
         }
 
+        if (string.Equals(providerKey, "Hunyuan3D", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(providerKey, "Hunyuan", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(providerKey, "Tencent", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(providerKey, "hy3d", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(providerKey, _hunyuanOptions.Value.DefaultEngine, StringComparison.OrdinalIgnoreCase))
+        {
+            var isExplicitlyDisabled = string.Equals(_configuration["AiProviders:Hunyuan3D:EnabledForNewJobs"], "false", StringComparison.OrdinalIgnoreCase);
+            var isConfigured = !string.IsNullOrWhiteSpace(_hunyuanOptions.Value.SecretId) && !string.IsNullOrWhiteSpace(_hunyuanOptions.Value.SecretKey);
+            return new ProviderCapabilities(
+                ProviderKey: "Hunyuan3D",
+                ModelKey: modelKey ?? _hunyuanOptions.Value.DefaultEngine ?? "pro",
+                ApiVersion: _hunyuanOptions.Value.Version ?? "2023-09-01",
+                PricingVersion: "2026.01",
+                AccountScope: "default",
+                SupportsImageTo3D: true,
+                SupportsTextTo3D: false,
+                SupportsTexture: true,
+                SupportsResize: false,
+                SupportsConvert: true,
+                SupportsAnalyze: true,
+                MinHeightMm: 100,
+                MaxHeightMm: 120,
+                AllowedFormats: ["glb", "stl"],
+                IsEnabledForNewJobs: !isExplicitlyDisabled && isConfigured
+            );
+        }
+
         throw new ProviderException($"Không nhận diện được provider '{providerKey}'.");
     }
 
     public IReadOnlyList<string> GetAvailableProviderKeys() => _providers.Keys.ToList();
 }
-

@@ -6,7 +6,8 @@ using TheBoys.Application.Printing;
 namespace TheBoys.Infrastructure.Printing;
 
 public sealed class LocalModelStorage(IHostEnvironment env, IConfiguration configuration,
-    IHttpClientFactory clients, IOptions<MeshyOptions> meshyOptions, IOptions<TripoOptions> tripoOptions) : IModelStorage
+    IHttpClientFactory clients, IOptions<MeshyOptions> meshyOptions, IOptions<TripoOptions> tripoOptions,
+    IOptions<Hunyuan3DOptions> hunyuanOptions) : IModelStorage
 {
     private readonly string root = Path.GetFullPath(configuration["Storage:Root"] ?? Path.Combine(env.ContentRootPath, "App_Data", "models"));
     private const long MaxAssetBytes = 200L * 1024 * 1024;
@@ -40,10 +41,20 @@ public sealed class LocalModelStorage(IHostEnvironment env, IConfiguration confi
     public async Task<string> DownloadAsync(Guid id, string kind, string url, CancellationToken ct)
     {
         if (kind is not ("glb" or "stl")) throw new ArgumentException("Định dạng không hợp lệ.");
+        if (url.StartsWith("local://stl/", StringComparison.OrdinalIgnoreCase))
+        {
+            var localKey = ModelKey(id, "stl");
+            var localPath = ResolvePath(localKey);
+            if (File.Exists(localPath) && new FileInfo(localPath).Length >= 84)
+            {
+                return localKey;
+            }
+            throw new InvalidDataException("File STL cục bộ không tồn tại hoặc không hợp lệ.");
+        }
         var uri = new Uri(url);
         // Dedicated client: provider Authorization headers are never sent to asset hosts.
         var client = clients.CreateClient("ModelAssets");
-        var allowedHosts = meshyOptions.Value.AssetHosts.Concat(tripoOptions.Value.AssetHosts)
+        var allowedHosts = meshyOptions.Value.AssetHosts.Concat(tripoOptions.Value.AssetHosts).Concat(hunyuanOptions.Value.AssetHosts)
             .ToArray();
         for (var redirects = 0; redirects <= 3; redirects++)
         {

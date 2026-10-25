@@ -34,6 +34,7 @@ public static class DependencyInjection
 
         services.Configure<MeshyOptions>(configuration.GetSection("AiProviders:Meshy"));
         services.Configure<TripoOptions>(configuration.GetSection("AiProviders:Tripo"));
+        services.Configure<Hunyuan3DOptions>(configuration.GetSection("AiProviders:Hunyuan3D"));
         services.Configure<PrintPricingOptions>(configuration.GetSection("PrintPricing"));
         services.Configure<TheBoys.Application.Quotes.QuoteOptions>(configuration.GetSection("Quote"));
         services.Configure<Payments.PaymentOptions>(configuration.GetSection(Payments.PaymentOptions.SectionName));
@@ -62,6 +63,17 @@ public static class DependencyInjection
                 || !string.Equals(uri.Host, "openapi.tripo3d.ai", StringComparison.OrdinalIgnoreCase)
                 || uri.AbsolutePath.TrimEnd('/') != "/v3")
                 throw new InvalidOperationException("Tripo BaseUrl phải là https://openapi.tripo3d.ai/v3.");
+            client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(60);
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+
+        services.AddHttpClient<Hunyuan3DProvider>(client =>
+        {
+            var baseUrl = configuration["AiProviders:Hunyuan3D:BaseUrl"] ?? "https://hunyuan.intl.tencentcloudapi.com";
+            if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !uri.IsDefaultPort
+                || (!string.Equals(uri.Host, "hunyuan.intl.tencentcloudapi.com", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(uri.Host, "ai3d.intl.tencentcloudapi.com", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Hunyuan3D BaseUrl phải là https://hunyuan.intl.tencentcloudapi.com hoặc https://ai3d.intl.tencentcloudapi.com.");
             client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromSeconds(60);
         }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });

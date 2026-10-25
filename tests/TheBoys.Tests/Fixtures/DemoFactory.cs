@@ -35,6 +35,7 @@ public sealed class DemoFactory : WebApplicationFactory<Program>, IAsyncLifetime
         {
             ["Database:InitializeOnStartup"] = "false", ["BootstrapAdmin:Email"] = "", ["BootstrapAdmin:Password"] = "",
             ["JwtSettings:Secret"] = "test-only-secret-not-for-real-use-0123456789", ["Logging:LogLevel:Default"] = "Warning",
+            ["PaymentSettings:ActiveGateway"] = "Sandbox",
             ["PaymentSettings:PayOS:ClientId"] = "test-client-id",
             ["PaymentSettings:PayOS:ApiKey"] = "test-api-key",
             ["PaymentSettings:PayOS:ChecksumKey"] = "test-checksum-key-1234567890abcdef",

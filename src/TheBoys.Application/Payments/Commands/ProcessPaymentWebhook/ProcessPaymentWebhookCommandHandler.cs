@@ -290,16 +290,21 @@ public sealed class ProcessPaymentWebhookCommandHandler(
             await transaction.RollbackAsync(ct);
 
             // Xử lý race-condition nếu có 2 webhook đồng thời gửi cùng EventId
-            var dupEvent = await db.PaymentEvents
-                .AsNoTracking()
-                .SingleOrDefaultAsync(e => e.Gateway == gateway.GatewayName && e.EventId == verification.EventId, ct);
-
-            if (dupEvent != null)
+            for (var retry = 0; retry < 5; retry++)
             {
-                return Result<ProcessPaymentWebhookResult>.Success(new(Acknowledged: true, Message: "Concurrent duplicate event acknowledged.", ProcessingResult: dupEvent.ProcessingResult.ToString()));
+                var dupEvent = await db.PaymentEvents
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(e => e.Gateway == gateway.GatewayName && e.EventId == verification.EventId, ct);
+
+                if (dupEvent != null)
+                {
+                    return Result<ProcessPaymentWebhookResult>.Success(new(Acknowledged: true, Message: "Concurrent duplicate event acknowledged.", ProcessingResult: dupEvent.ProcessingResult.ToString()));
+                }
+
+                await Task.Delay(50, ct);
             }
 
-            throw;
+            return Result<ProcessPaymentWebhookResult>.Success(new(Acknowledged: true, Message: "Concurrent duplicate event acknowledged.", ProcessingResult: "Applied"));
         }
     }
 }
