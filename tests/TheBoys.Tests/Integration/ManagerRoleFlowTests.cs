@@ -1,3 +1,5 @@
+using TheBoys.Application.Defects.DTOs;
+using TheBoys.Application.Payments.DTOs;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
@@ -434,18 +436,285 @@ public class ManagerRoleFlowTests(DemoFactory factory) : IClassFixture<DemoFacto
         Assert.Equal("cus", meDemoted.GetProperty("role").GetString());
     }
 
+    [Fact]
+    public async Task AC07_ManagerOperationalV2QueuesAndRefundPermissionGuards()
+    {
+        using var manager = await factory.Client(factory.ManagerId);
+        using var customer = await factory.Client(factory.CustomerId);
+        using var staff = await factory.Client(factory.StaffId);
+
+        // 1. Staff v2 queues: Manager has access (200 OK), Customer is Forbidden (403)
+        var jobsRes = await manager.GetAsync("/api/v2/staff/generation-jobs");
+        Assert.Equal(HttpStatusCode.OK, jobsRes.StatusCode);
+
+        var ordersRes = await manager.GetAsync("/api/v2/staff/orders");
+        Assert.Equal(HttpStatusCode.OK, ordersRes.StatusCode);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.GetAsync("/api/v2/staff/generation-jobs")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.GetAsync("/api/v2/staff/orders")).StatusCode);
+
+        // 2. Operational v2 endpoints: Manager can read partner labs & order fulfillment
+        var partnerLabsRes = await manager.GetAsync("/api/v2/partner-labs");
+        Assert.Equal(HttpStatusCode.OK, partnerLabsRes.StatusCode);
+
+        // Seed a delivered order for testing defect & refund flows
+        var testAmount = 390000m;
+        Order order;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            order = new Order
+            {
+                Id = Guid.NewGuid(),
+                OrderCode = $"TB-MGR-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}",
+                UserId = factory.CustomerId,
+                QuoteId = null,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                Status = OrderStatus.Delivered,
+                FulfillmentStatus = "Delivered",
+                OrderPaymentStatus = "Paid",
+                Currency = "VND",
+                Quantity = 1,
+                UnitPriceSnapshot = testAmount,
+                PartnerCostSnapshot = 120000m,
+                SubTotalVnd = testAmount,
+                ShippingFeeRaw = 0,
+                FinalShippingFee = 0,
+                TotalAmount = testAmount,
+                ReceiverName = "Nguyen Van Customer",
+                ReceiverPhone = "0912345678",
+                StreetAddress = "789 Dien Bien Phu",
+                District = "Binh Thanh",
+                City = "Ho Chi Minh",
+                DeliveredAtUtc = DateTime.UtcNow,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Orders.Add(order);
+
+            var attempt = PaymentAttempt.Create(order.Id, "Sandbox", $"REF-MGR-{Guid.NewGuid():N}", testAmount, "VND", DateTime.UtcNow.AddMinutes(30), DateTime.UtcNow);
+            attempt.MarkSucceeded($"TX-MGR-{Guid.NewGuid():N}", DateTime.UtcNow);
+            db.PaymentAttempts.Add(attempt);
+
+            var lab = new PartnerLab
+            {
+                Id = Guid.NewGuid(),
+                LabName = "Saigon Print Lab",
+                ContactPerson = "Tran Van Lab",
+                PhoneNumber = "0988776655",
+                District = "Binh Thanh",
+                Address = "12 D2 Street",
+                CapacityPerDay = 40,
+                IsActive = true,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.PartnerLabs.Add(lab);
+
+            var assignment = PartnerAssignment.Create(order.Id, lab.Id, factory.StaffId, 120000m, DateTime.UtcNow.AddDays(2), "Initial Assignment", DateTime.UtcNow);
+            assignment.Accept("Accepted");
+            db.PartnerAssignments.Add(assignment);
+
+            await db.SaveChangesAsync();
+        }
+
+        // Manager can view cross-owner order v2 details & fulfillment timeline
+        var getOrderRes = await manager.GetAsync($"/api/v2/orders/{order.Id}");
+        Assert.Equal(HttpStatusCode.OK, getOrderRes.StatusCode);
+
+        var timelineRes = await manager.GetAsync($"/api/v2/orders/{order.Id}/fulfillment");
+        Assert.Equal(HttpStatusCode.OK, timelineRes.StatusCode);
+
+        // Customer creates DefectReport
+        var defectReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/{order.Id}/defect-reports")
+        {
+            Content = JsonContent.Create(new
+            {
+                reason = "Sản phẩm bị nứt đế",
+                evidence = new[]
+                {
+                    new { storageKey = "s3://evidence/crack.jpg", sha256Hex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }
+                }
+            })
+        };
+        defectReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        var defectRes = await customer.SendAsync(defectReq);
+        Assert.Equal(HttpStatusCode.Created, defectRes.StatusCode);
+        var defectDto = await defectRes.Content.ReadFromJsonAsync<DefectReportDto>();
+        Assert.NotNull(defectDto);
+
+        // 3. FINANCIAL GUARD: Manager CANNOT initiate refund (403 Forbidden)
+        var refundReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/{order.Id}/refunds")
+        {
+            Content = JsonContent.Create(new
+            {
+                amountVnd = testAmount,
+                reason = "Manager refund attempt"
+            })
+        };
+        refundReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        var refundRes = await manager.SendAsync(refundReq);
+        Assert.Equal(HttpStatusCode.Forbidden, refundRes.StatusCode);
+
+        // Verify in DB: No refund created, order payment status still "Paid"
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var hasRefund = await db.Refunds.AnyAsync(r => r.PaymentAttempt.OrderId == order.Id);
+            Assert.False(hasRefund);
+            var dbOrder = await db.Orders.FindAsync(order.Id);
+            Assert.Equal("Paid", dbOrder!.OrderPaymentStatus);
+        }
+
+        // 4. FINANCIAL GUARD: Manager CANNOT approve defect refund (RefundApproved -> 403 Forbidden)
+        var resolveRefundReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/defect-reports/{defectDto.Id}/resolve")
+        {
+            Content = JsonContent.Create(new
+            {
+                resolutionType = "RefundApproved",
+                resolutionNote = "Manager cannot approve refund"
+            })
+        };
+        var resolveRefundRes = await manager.SendAsync(resolveRefundReq);
+        Assert.Equal(HttpStatusCode.Forbidden, resolveRefundRes.StatusCode);
+
+        // Verify defect report still Open
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var dbReport = await db.DefectReports.FindAsync(defectDto.Id);
+            Assert.Equal(DefectReportStatus.Open, dbReport!.Status);
+        }
+
+        // 5. OPERATIONAL RESOLUTION: Manager CAN resolve defect with ReprintApproved (200 OK)
+        var resolveReprintReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/defect-reports/{defectDto.Id}/resolve")
+        {
+            Content = JsonContent.Create(new
+            {
+                resolutionType = "ReprintApproved",
+                resolutionNote = "Manager approved operational reprint"
+            })
+        };
+        var resolveReprintRes = await manager.SendAsync(resolveReprintReq);
+        Assert.Equal(HttpStatusCode.OK, resolveReprintRes.StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var dbReport = await db.DefectReports.FindAsync(defectDto.Id);
+            Assert.Equal(DefectReportStatus.ReprintApproved, dbReport!.Status);
+            Assert.NotNull(dbReport.ReprintRunId);
+        }
+
+        // 6. BASELINE INTACT: Staff CAN execute defect refund and initiate refund
+        Order staffOrder;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            staffOrder = new Order
+            {
+                Id = Guid.NewGuid(),
+                OrderCode = $"TB-STF-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid():N}",
+                UserId = factory.CustomerId,
+                QuoteId = null,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                Status = OrderStatus.Delivered,
+                FulfillmentStatus = "Delivered",
+                OrderPaymentStatus = "Paid",
+                Currency = "VND",
+                Quantity = 1,
+                UnitPriceSnapshot = testAmount,
+                PartnerCostSnapshot = 120000m,
+                SubTotalVnd = testAmount,
+                ShippingFeeRaw = 0,
+                FinalShippingFee = 0,
+                TotalAmount = testAmount,
+                ReceiverName = "Nguyen Van Customer",
+                ReceiverPhone = "0912345678",
+                StreetAddress = "789 Dien Bien Phu",
+                District = "Binh Thanh",
+                City = "Ho Chi Minh",
+                DeliveredAtUtc = DateTime.UtcNow,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Orders.Add(staffOrder);
+
+            var attempt = PaymentAttempt.Create(staffOrder.Id, "Sandbox", $"REF-STF-{Guid.NewGuid():N}", testAmount, "VND", DateTime.UtcNow.AddMinutes(30), DateTime.UtcNow);
+            attempt.MarkSucceeded($"TX-STF-{Guid.NewGuid():N}", DateTime.UtcNow);
+            db.PaymentAttempts.Add(attempt);
+
+            await db.SaveChangesAsync();
+        }
+
+        var staffDefectReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/{staffOrder.Id}/defect-reports")
+        {
+            Content = JsonContent.Create(new
+            {
+                reason = "Sản phẩm hỏng hoàn toàn",
+                evidence = new[]
+                {
+                    new { storageKey = "s3://evidence/broken.jpg", sha256Hex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" }
+                }
+            })
+        };
+        staffDefectReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        var staffDefectRes = await customer.SendAsync(staffDefectReq);
+        var staffDefectDto = await staffDefectRes.Content.ReadFromJsonAsync<DefectReportDto>();
+
+        // Staff approves refund -> 200 OK
+        var staffResolveRes = await staff.PostAsJsonAsync($"/api/v2/defect-reports/{staffDefectDto!.Id}/resolve", new
+        {
+            resolutionType = "RefundApproved",
+            resolutionNote = "Staff approved full refund"
+        });
+        Assert.Equal(HttpStatusCode.OK, staffResolveRes.StatusCode);
+
+        // Staff initiates refund -> 201 Created
+        var staffRefundReq = new HttpRequestMessage(HttpMethod.Post, $"/api/v2/orders/{staffOrder.Id}/refunds")
+        {
+            Content = JsonContent.Create(new
+            {
+                amountVnd = testAmount,
+                reason = "Staff processed refund"
+            })
+        };
+        staffRefundReq.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString());
+        var staffRefundRes = await staff.SendAsync(staffRefundReq);
+        Assert.Equal(HttpStatusCode.Created, staffRefundRes.StatusCode);
+    }
+
     private async Task<Guid> NewCustomer(int credits = 10)
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var now = DateTime.UtcNow;
+        var email = $"{Guid.NewGuid():N}@example.test";
         var user = new User
         {
-            Email = $"{Guid.NewGuid():N}@example.test",
+            Email = email,
+            NormalizedEmail = email.ToUpperInvariant(),
             FullName = "Test User",
             Role = UserRole.Customer,
+            AccountStatus = AccountStatus.Active,
+            EmailVerifiedAtUtc = now,
             FreeTrialRemaining = credits
         };
         db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        var account = CreditAccount.Create(user.Id, trialBalance: credits, purchasedBalance: 0);
+        db.CreditAccounts.Add(account);
+
+        var ledgerEntry = CreditLedgerEntry.CreateOpeningBalance(
+            user.Id,
+            CreditBucket.Trial,
+            credits,
+            "SEEDED",
+            "Test seed balance",
+            now);
+        db.CreditLedger.Add(ledgerEntry);
+
+        var consent = ConsentRecord.Record(user.Id, "AiModelProcessing", "v1.0", true, now);
+        db.ConsentRecords.Add(consent);
+
         await db.SaveChangesAsync();
         return user.Id;
     }

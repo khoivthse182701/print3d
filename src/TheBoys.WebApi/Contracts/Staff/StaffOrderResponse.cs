@@ -5,7 +5,7 @@ namespace TheBoys.WebApi.Contracts.Staff;
 public sealed record StaffOrderResponse(
     Guid Id,
     string OrderCode,
-    Guid GenerationTaskId,
+    Guid? GenerationTaskId,
     OrderStatus Status,
     int Quantity,
     DateTime CreatedAtUtc,

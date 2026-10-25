@@ -1,7 +1,7 @@
 # Đặc tả Vai trò Quản lý (Manager Role) và Luồng Vận hành
 
-Phiên bản: 1.0
-Ngày: 25/10/2026
+Phiên bản: 1.1 (Cập nhật sau tích hợp origin/main — Task MGR-001)
+Ngày: 26/10/2026
 Mã nhiệm vụ: `MGR-001`
 Tài liệu liên quan: [SRS.vi.md](SRS.vi.md), [use-cases.vi.md](use-cases.vi.md), [backend-contract.vi.md](../api/backend-contract.vi.md), [demo-flow.vi.md](../runbooks/demo-flow.vi.md)
 
@@ -25,8 +25,8 @@ Người dùng đã xác nhận ngày 25/10/2026: **Manager là một vai trò (
 #### B. Quyết định thiết kế riêng cho nền tảng THE BOYS
 Dựa trên các tham khảo trên cùng với yêu cầu nghiệp vụ của dự án, THE BOYS đưa ra các quyết định thiết kế kiến trúc như sau:
 1. **Tách biệt phân quyền vận hành khỏi quản trị hệ thống**:
-   - Manager là vai trò giám sát vận hành cấp cao: tham gia toàn bộ các luồng vận hành của Staff/Admin hiện có (duyệt hàng đợi tác vụ/đơn hàng toàn hệ thống, đối soát/cứu hộ tác vụ AI, thẩm định kỹ thuật mô hình in 3D, cập nhật tiến trình sản xuất và hủy đơn hàng ở trạng thái Draft).
-   - Manager **không** có quyền quản trị hệ thống. Mọi thao tác quản trị tài khoản, phân bổ role, điều chỉnh credits thủ công, cập nhật biểu phí gói in (`/api/admin/pricing-packages`) và phê duyệt hoàn tiền thuộc thẩm quyền độc quyền của **Admin**. Quyết định về bảng giá và chính sách hệ thống là quyết định nội bộ của THE BOYS, không suy diễn từ phần mềm của bên thứ ba.
+   - Manager là vai trò giám sát vận hành cấp cao: tham gia toàn bộ các luồng vận hành của Staff/Admin hiện có (duyệt hàng đợi tác vụ/đơn hàng toàn hệ thống, hàng đợi vận hành v2, đối soát/cứu hộ tác vụ AI, thẩm định kỹ thuật mô hình in 3D, cập nhật tiến trình sản xuất, giải quyết khiếu nại in lại và hủy đơn hàng ở trạng thái Draft).
+   - Manager **không** có quyền quản trị hệ thống và tài chính. Mọi thao tác quản trị tài khoản, phân bổ role, điều chỉnh credits thủ công, cập nhật biểu phí gói in (`/api/admin/pricing-packages`), khởi tạo giao dịch hoàn tiền (`POST /api/v2/orders/{id}/refunds`) và phê duyệt bồi thường hoàn tiền (`RefundApproved`) thuộc thẩm quyền độc quyền của **Admin / Staff**. Quyết định về bảng giá và chính sách hệ thống là quyết định nội bộ của THE BOYS, không suy diễn từ phần mềm của bên thứ ba.
 2. **Mô hình xưởng đối tác bên ngoài (PartnerLabs theo A04)**:
    - THE BOYS đóng vai trò là nền tảng điều phối xưởng gia công đối tác bên ngoài (PartnerLabs), hệ thống không mặc định sở hữu hoặc vận hành xưởng in cơ khí. Do đó, THE BOYS không sao chép các tính năng điều khiển máy in vật lý hay kết nối trực tiếp thiết bị như Formlabs/Prusa.
 3. **Bảo toàn Invariant nghiệp vụ (Business Invariants)**:
@@ -35,6 +35,7 @@ Dựa trên các tham khảo trên cùng với yêu cầu nghiệp vụ của d�
      - Không cho phép nhảy cóc hoặc quay lui trạng thái đơn hàng (`InvalidTransition`).
      - Không cho phép hủy trực tiếp đơn hàng đã bước vào giai đoạn in (`CannotCancel`).
      - Tạo đơn hàng mới giữ nguyên quy tắc chỉ chủ sở hữu mô hình mới được tạo (`owner-only`).
+     - Manager bị chặn tuyệt đối ở cổng tài chính hoàn tiền (trả `403 Forbidden`, không sinh side effect số dư hay giao dịch ngân hàng).
 
 ---
 
@@ -43,17 +44,17 @@ Dựa trên các tham khảo trên cùng với yêu cầu nghiệp vụ của d�
 Hệ thống quản lý 4 vai trò chính:
 - `Customer` (Enum = 0, Claim = `cus`): Khách hàng cá nhân, chỉ truy cập và thao tác trên tài nguyên của chính mình.
 - *(Giá trị 1 là PartnerLab cũ thời kỳ legacy, được bảo lưu và không tái sử dụng)*.
-- `Staff` (Enum = 2, Claim = `staff`): Nhân viên vận hành hệ thống của THE BOYS (hỗ trợ điều phối đơn, đối soát kỹ thuật mô hình, cập nhật trạng thái đơn).
+- `Staff` (Enum = 2, Claim = `staff`): Nhân viên vận hành hệ thống của THE BOYS (hỗ trợ điều phối đơn, đối soát kỹ thuật mô hình, cập nhật trạng thái đơn, khởi tạo hoàn tiền theo thẩm quyền).
 - `Admin` (Enum = 3, Claim = `admin`): Quản trị viên hệ thống của THE BOYS.
-- `Manager` (Enum = 4, Claim = `manager`): Người giám sát vận hành của THE BOYS (giám sát hàng đợi toàn hệ thống, cứu hộ tác vụ, thẩm định in, điều phối đơn và hủy đơn Draft).
+- `Manager` (Enum = 4, Claim = `manager`): Người giám sát vận hành của THE BOYS (giám sát hàng đợi v1/v2 toàn hệ thống, cứu hộ tác vụ, thẩm định in, điều phối đơn, giải quyết khiếu nại in lại, đối soát vận hành; không có quyền tài chính hoàn tiền).
 
 | Phân hệ / Endpoint | Phương thức | Customer | Staff | Manager | Admin | Dẫn chứng Code / Route |
 |---|---|:---:|:---:|:---:|:---:|---|
 | **Xác thực & Tài khoản** | | | | | | |
-| `/api/auth/register` | POST | Public | Public | Public | Public | [AuthController.cs](../../src/TheBoys.WebApi/Controllers/AuthController.cs#L28); chặn unmapped `role` |
-| `/api/auth/login` | POST | Có | Có | Có | Có | [AuthController.cs](../../src/TheBoys.WebApi/Controllers/AuthController.cs#L41) |
-| `/api/auth/me` | GET | Own | Own | Own | Own | [AuthController.cs](../../src/TheBoys.WebApi/Controllers/AuthController.cs#L55) |
-| **Tạo & Giám sát Tác vụ AI (Generations)** | | | | | | |
+| `/api/auth/register` | POST | Public | Public | Public | Public | [AuthController.cs](../../src/TheBoys.WebApi/Controllers/AuthController.cs#L74); gán cố định Customer |
+| `/api/auth/login` | POST | Có | Có | Có | Có | [AuthController.cs](../../src/TheBoys.WebApi/Controllers/AuthController.cs#L140) |
+| `/api/auth/me` | GET | Own | Own | Own | Own | [AuthController.cs](../../src/TheBoys.WebApi/Controllers/AuthController.cs#L190) |
+| **Tạo & Giám sát Tác vụ AI (Generations v1)** | | | | | | |
 | `/api/generations/image` | POST | Own | Own | Own | Own | [GenerationsController.cs](../../src/TheBoys.WebApi/Controllers/GenerationsController.cs#L40) |
 | `/api/generations` (Danh sách) | GET | Chỉ tác vụ mình | Toàn bộ hệ thống | Toàn bộ hệ thống | Toàn bộ hệ thống | [GenerationsController.cs](../../src/TheBoys.WebApi/Controllers/GenerationsController.cs#L67), `IsManagement` |
 | `/api/generations/{id}` (Chi tiết) | GET | Chỉ tác vụ mình | Toàn bộ (+ provider IDs) | Toàn bộ (+ provider IDs) | Toàn bộ (+ provider IDs) | [GenerationsController.cs](../../src/TheBoys.WebApi/Controllers/GenerationsController.cs#L74), [GenerationQueries.cs](../../src/TheBoys.Application/Generations/Queries/GenerationQueries.cs#L40) |
@@ -61,18 +62,28 @@ Hệ thống quản lý 4 vai trò chính:
 | `/api/generations/{id}/files/{kind}` | GET | Chỉ tác vụ mình | Toàn bộ hệ thống | Toàn bộ hệ thống | Toàn bộ hệ thống | [GenerationsController.cs](../../src/TheBoys.WebApi/Controllers/GenerationsController.cs#L88) |
 | `/api/generations/{id}/review` | POST | 403 Forbidden | Có | Có | Có | [GenerationsController.cs](../../src/TheBoys.WebApi/Controllers/GenerationsController.cs#L108), `Roles.Management` |
 | `/api/generations/{id}/recover` | POST | 403 Forbidden | Có | Có | Có | [GenerationsController.cs](../../src/TheBoys.WebApi/Controllers/GenerationsController.cs#L115), `Roles.Management` |
-| **Xử lý Đơn hàng (Orders)** | | | | | | |
-| `/api/orders` (Tạo đơn mới) | POST | Own task | Own task | Own task | Own task | [OrdersController.cs](../../src/TheBoys.WebApi/Controllers/OrdersController.cs#L40), [CreateOrderCommand.cs](../../src/TheBoys.Application/Orders/Commands/CreateOrder/CreateOrderCommand.cs#L49) |
-| `/api/orders` (Danh sách đơn) | GET | Chỉ đơn mình | Toàn bộ hệ thống | Toàn bộ hệ thống | Toàn bộ hệ thống | [OrdersController.cs](../../src/TheBoys.WebApi/Controllers/OrdersController.cs#L65), [OrderQueries.cs](../../src/TheBoys.Application/Orders/Queries/OrderQueries.cs#L19) |
-| `/api/orders/{id}` (Chi tiết đơn) | GET | Chỉ đơn mình | Toàn bộ hệ thống | Toàn bộ hệ thống | Toàn bộ hệ thống | [OrdersController.cs](../../src/TheBoys.WebApi/Controllers/OrdersController.cs#L72), [OrderQueries.cs](../../src/TheBoys.Application/Orders/Queries/OrderQueries.cs#L38) |
-| `/api/orders/{id}/cancel` | POST | Chỉ đơn Draft mình | Đơn Draft bất kỳ | Đơn Draft bất kỳ | Đơn Draft bất kỳ | [OrdersController.cs](../../src/TheBoys.WebApi/Controllers/OrdersController.cs#L79), [CancelOrderCommand.cs](../../src/TheBoys.Application/Orders/Commands/CancelOrder/CancelOrderCommand.cs#L21) |
-| `/api/orders/{id}/status` | PATCH | 403 Forbidden | Có | Có | Có | [OrdersController.cs](../../src/TheBoys.WebApi/Controllers/OrdersController.cs#L85), `Roles.Management` |
+| **Hàng đợi Vận hành v2 (Staff / Management Queues)** | | | | | | |
+| `/api/v2/staff/generation-jobs` | GET | 403 Forbidden | Có | Có | Có | [StaffController.cs](../../src/TheBoys.WebApi/Controllers/StaffController.cs#L23), `Roles.Management` |
+| `/api/v2/staff/orders` | GET | 403 Forbidden | Có | Có | Có | [StaffController.cs](../../src/TheBoys.WebApi/Controllers/StaffController.cs#L143), `Roles.Management` |
+| **Xử lý Đơn hàng & Luồng v2 (Orders & Fulfillment v2)** | | | | | | |
+| `/api/orders` (Tạo đơn mới v1) | POST | Own task | Own task | Own task | Own task | [OrdersController.cs](../../src/TheBoys.WebApi/Controllers/OrdersController.cs#L40) |
+| `/api/orders` (Danh sách đơn v1) | GET | Chỉ đơn mình | Toàn bộ hệ thống | Toàn bộ hệ thống | Toàn bộ hệ thống | [OrdersController.cs](../../src/TheBoys.WebApi/Controllers/OrdersController.cs#L65) |
+| `/api/orders/{id}` (Chi tiết đơn v1) | GET | Chỉ đơn mình | Toàn bộ hệ thống | Toàn bộ hệ thống | Toàn bộ hệ thống | [OrdersController.cs](../../src/TheBoys.WebApi/Controllers/OrdersController.cs#L72) |
+| `/api/orders/{id}/cancel` (Hủy đơn v1) | POST | Chỉ đơn Draft mình | Đơn Draft bất kỳ | Đơn Draft bất kỳ | Đơn Draft bất kỳ | [OrdersController.cs](../../src/TheBoys.WebApi/Controllers/OrdersController.cs#L79) |
+| `/api/orders/{id}/status` (Chuyển trạng thái v1) | PATCH | 403 Forbidden | Có | Có | Có | [OrdersController.cs](../../src/TheBoys.WebApi/Controllers/OrdersController.cs#L85), `Roles.Management` |
+| `/api/v2/orders/{id}` (Chi tiết đơn v2) | GET | Chỉ đơn mình | Toàn bộ hệ thống | Toàn bộ hệ thống | Toàn bộ hệ thống | [OrdersV2Controller.cs](../../src/TheBoys.WebApi/Controllers/v2/OrdersV2Controller.cs#L97), `CanAccess` |
+| `/api/v2/orders/{id}/fulfillment` | GET | Chỉ đơn mình | Toàn bộ hệ thống | Toàn bộ hệ thống | Toàn bộ hệ thống | [FulfillmentV2Controller.cs](../../src/TheBoys.WebApi/Controllers/v2/FulfillmentV2Controller.cs#L256), `IsManagement` |
+| `/api/v2/partner-labs` | GET | 403 Forbidden | Có | Có | Có | [FulfillmentV2Controller.cs](../../src/TheBoys.WebApi/Controllers/v2/FulfillmentV2Controller.cs#L67), `Roles.Management` |
+| `/api/v2/payments/reconcile/{id}` | POST | 403 Forbidden | Có | Có | Có | [PaymentReconciliationController.cs](../../src/TheBoys.WebApi/Controllers/v2/PaymentReconciliationController.cs#L18), `Roles.Management` |
+| `/api/v2/refunds/{id}/reconcile` | POST | 403 Forbidden | Có | Có | Có | [RefundsController.cs](../../src/TheBoys.WebApi/Controllers/v2/RefundsController.cs#L23), `Roles.Management` |
+| `/api/v2/defect-reports/{id}/resolve` (`ReprintApproved` / `Rejected`) | POST | 403 Forbidden | Có | Có | Có | [DefectReportsV2Controller.cs](../../src/TheBoys.WebApi/Controllers/v2/DefectReportsV2Controller.cs#L81) |
+| `/api/v2/defect-reports/{id}/resolve` (`RefundApproved`) | POST | 403 Forbidden | Có | **403 Forbidden** | Có | [DefectReportsV2Controller.cs](../../src/TheBoys.WebApi/Controllers/v2/DefectReportsV2Controller.cs#L93), chặn Manager |
+| `/api/v2/orders/{id}/refunds` (Tạo giao dịch hoàn tiền) | POST | 403 Forbidden | Có | **403 Forbidden** | Có | [OrdersV2Controller.cs](../../src/TheBoys.WebApi/Controllers/v2/OrdersV2Controller.cs#L206), chặn Manager |
 | **Quản trị Hệ thống (Admin-Only)** | | | | | | |
 | `/api/admin/users` | GET | 403 Forbidden | 403 Forbidden | **403 Forbidden** | Có | [AdminController.cs](../../src/TheBoys.WebApi/Controllers/AdminController.cs#L22), `Authorize(Roles = Roles.Admin)` |
 | `/api/admin/users/{id}/role` | PATCH | 403 Forbidden | 403 Forbidden | **403 Forbidden** | Có | [AdminController.cs](../../src/TheBoys.WebApi/Controllers/AdminController.cs#L29), [AdminCommands.cs](../../src/TheBoys.Application/Admin/Commands/AdminCommands.cs#L21) |
 | `/api/admin/users/{id}/credits` | POST | 403 Forbidden | 403 Forbidden | **403 Forbidden** | Có | [AdminController.cs](../../src/TheBoys.WebApi/Controllers/AdminController.cs#L38), [AdminCommands.cs](../../src/TheBoys.Application/Admin/Commands/AdminCommands.cs#L63) |
 | `/api/admin/pricing-packages/{id}` | PATCH | 403 Forbidden | 403 Forbidden | **403 Forbidden** | Có | [AdminController.cs](../../src/TheBoys.WebApi/Controllers/AdminController.cs#L47), [AdminCommands.cs](../../src/TheBoys.Application/Admin/Commands/AdminCommands.cs#L85) |
-| `/api/admin/refunds` *(Mục tiêu SRS FR-18)* | POST | N/A | N/A | N/A | Chưa có API | Thuộc mục tiêu SRS P0, chưa có endpoint trong source |
 
 ---
 
@@ -81,18 +92,18 @@ Hệ thống quản lý 4 vai trò chính:
 ### 3.1. Luồng chính (Main Flow: Giám sát & Vận hành Tiêu chuẩn)
 ```
 [Admin] Cấp role Manager cho User qua PATCH /api/admin/users/{id}/role
-         ↓ (Cache in-memory lập tức bị vô hiệu hóa)
+         ↓ (Được lưu vào SQL DB; OnTokenValidated đọc trực tiếp DB mỗi request)
 [Manager] Đăng nhập nhận JWT (claim role="manager") hoặc sử dụng token hiện có
          ↓
-[Manager] Xem hàng đợi tác vụ AI: GET /api/generations
+[Manager] Xem hàng đợi tác vụ AI: GET /api/v2/staff/generation-jobs hoặc GET /api/generations
          ↓
 [Manager] Kiểm tra chi tiết kỹ thuật và tải mô hình: GET /api/generations/{id}/files/stl
          ↓
 [Manager] Thẩm định chất lượng in: POST /api/generations/{id}/review (approved=true)
          ↓
-[Customer] Tạo đơn hàng từ mẫu đã duyệt: POST /api/orders
+[Customer] Tạo đơn hàng từ mẫu đã duyệt: POST /api/orders hoặc thanh toán qua v2
          ↓
-[Manager] Giám sát đơn và cập nhật tiến trình điều phối sản xuất:
+[Manager] Giám sát đơn qua GET /api/v2/staff/orders và cập nhật tiến trình điều phối sản xuất:
           1. PATCH /api/orders/{id}/status (status="printing", ghi chú xưởng gia công)
           2. PATCH /api/orders/{id}/status (status="packaged")
           3. PATCH /api/orders/{id}/status (status="shipping", trackingNumber="...")
@@ -100,10 +111,9 @@ Hệ thống quản lý 4 vai trò chính:
 ```
 
 1. **Cấp quyền**: Admin sử dụng `PATCH /api/admin/users/{id}/role` gửi `{ "role": "manager" }`.
-   - Hệ thống ghi nhận `UserRole.Manager = 4`, ghi nhận thời gian `UpdatedAtUtc`.
-   - `userRoleCache.Remove(targetUserId)` được gọi ngay lập tức, xóa cache role in-memory.
-2. **Kích hoạt tức thì (No-relogin)**: Token JWT đã cấp trước đó của người dùng sẽ phản ánh quyền Manager ở ngay request kế tiếp trong cùng instance mà không bắt buộc người dùng phải đăng nhập lại.
-3. **Giám sát diện rộng**: Manager gọi `GET /api/generations` và `GET /api/orders` để theo dõi các tác vụ và đơn hàng trên toàn hệ thống.
+   - Hệ thống ghi nhận `UserRole.Manager = 4`, cập nhật trực tiếp vào cơ sở dữ liệu.
+2. **Kích hoạt tức thì (No-relogin)**: Pipeline xác thực `OnTokenValidated` tra cứu trạng thái và role từ cơ sở dữ liệu trên mỗi request, do đó token JWT đã cấp trước đó của người dùng phản ánh quyền Manager ngay tại request kế tiếp trong cùng instance mà không bắt buộc người dùng phải đăng nhập lại.
+3. **Giám sát diện rộng**: Manager gọi các hàng đợi `GET /api/v2/staff/generation-jobs`, `GET /api/v2/staff/orders`, `GET /api/generations` và `GET /api/orders` để theo dõi các tác vụ và đơn hàng trên toàn hệ thống.
 4. **Thẩm định kỹ thuật**:
    - Manager tải file STL kiểm tra độ khép kín (watertight) và độ dày thành mô hình.
    - Manager gọi `POST /api/generations/{id}/review` với `{ "approved": true, "note": "Đã kiểm tra lát cắt và lưới tam giác" }`.
@@ -133,13 +143,18 @@ Theo cơ chế xử lý của hệ thống trong [`GenerationProcessor.cs`](../.
 - Đơn hàng chuyển sang trạng thái `Cancelled`, lưu lại thông tin người hủy trong `statusNote`.
 - **Guard**: Nếu đơn hàng đã bắt đầu in (`Printing` trở đi), lệnh hủy trực tiếp sẽ bị từ chối với mã `409 Conflict` (`CannotCancel`).
 
+#### D. Tiếp nhận & Giải quyết khiếu nại (Defect Resolution)
+- Khi khách hàng gửi khiếu nại sản phẩm sau khi giao qua `POST /api/v2/orders/{id}/defect-reports`:
+  - Manager có quyền thẩm định và phê duyệt in lại (`ReprintApproved`) hoặc từ chối (`Rejected`) qua `POST /api/v2/defect-reports/{id}/resolve`.
+  - **Financial Gate**: Nếu hướng giải quyết là hoàn tiền (`RefundApproved`), Manager bị chặn với mã `403 Forbidden`. Quyết định hoàn tiền bắt buộc phải do Staff/Admin phê duyệt.
+
 ### 3.3. Luồng Chuyển tiếp / Báo cáo sự cố lên Admin (Escalation Flows)
 
 Vì Manager không có quyền can thiệp vào tài khoản, tài chính hay cấu hình lõi, các trường hợp sau đây bắt buộc phải chuyển tiếp lên Quản trị viên (Admin):
 
-1. **Yêu cầu hoàn tiền (Refund Escalation — FR-18)**:
-   - Khi sản phẩm giao bị hỏng hoặc khách hàng hủy đơn sau khi đã thanh toán, Manager **không** có quyền tự hoàn tiền.
-   - Manager lập hồ sơ sự vụ và chuyển tiếp cho Admin xử lý phê duyệt hoàn tiền theo chính sách.
+1. **Khởi tạo & Phê duyệt hoàn tiền (Refund Escalation — FR-18)**:
+   - Khi sản phẩm giao bị hỏng nặng hoặc khách hàng hủy đơn sau khi đã thanh toán mà cần hoàn tiền mặt/chuyển khoản, Manager **không** có quyền gọi `POST /api/v2/orders/{id}/refunds` hoặc duyệt `RefundApproved`.
+   - Manager lập hồ sơ sự vụ và chuyển tiếp cho Admin/Staff xử lý phê duyệt hoàn tiền theo chính sách.
 2. **Cập nhật biểu phí & bảng giá (Pricing Package Escalation — FR-20)**:
    - Khi xưởng đối tác điều chỉnh giá vật liệu nhựa hoặc chi phí gia công, Manager không thể tự sửa giá.
    - Manager báo cáo để Admin thực hiện `PATCH /api/admin/pricing-packages/{id}`.
@@ -150,30 +165,30 @@ Vì Manager không có quyền can thiệp vào tài khoản, tài chính hay c�
 
 ---
 
-## 4. Bảng Đối chiếu: Hiện trạng Demo vs Mục tiêu SRS P0
+## 4. Bảng Đối chiếu: Hiện trạng Triển khai vs Mục tiêu SRS P0
 
-Tài liệu này xác định nền tảng vai trò Manager trong giai đoạn hiện tại. Bảng dưới đây phân biệt rõ các chức năng đã có trong mã nguồn với các mục tiêu P0 trong SRS đang thiếu phụ thuộc:
+Bảng dưới đây cập nhật hiện trạng mã nguồn sau khi đồng bộ `origin/main` (tích hợp các module Identity, Credit Ledger, Payment v2, Fulfillment v2, QC, Notifications) và phân định phạm vi trách nhiệm của vai trò Manager:
 
-| Phân hệ / Khả năng | Yêu cầu SRS | Hiện trạng triển khai trong Mã nguồn | Mục tiêu SRS v1.0 (P0) / Giới hạn baseline | Trạng thái Nghiệp vụ |
+| Phân hệ / Khả năng | Yêu cầu SRS | Hiện trạng triển khai trong Mã nguồn | Mục tiêu SRS v1.0 (P0) / Giới hạn vận hành | Trạng thái Nghiệp vụ |
 |---|---|---|---|---|
-| **Cơ chế Phân quyền** | FR-20 (một phần) | 4 roles: `Customer`, `Staff`, `Admin`, `Manager`. Nhóm `Management` bao gồm `staff,manager,admin`. | Quản trị vai trò (Customer, Staff, Manager, Admin), bảo vệ self-change và last-admin. Phạm vi FR-20 còn lại (khóa account, version gói/policy bất biến, audit before/after loại bỏ PII/secret) chưa thuộc task MGR-001. | **Hoàn tất scope Manager của MGR-001** (FR-20 mới đáp ứng một phần) |
-| **Thanh toán (Payment)** | FR-12, FR-13, A03 | Phương thức giả lập ngoại tuyến (`paymentMode = "demo_offline_no_online_charge"`), không kết nối gateway thật. | Thanh toán đủ VND trước khi in (FR-12/13). Theo giả định **A03**, cổng thanh toán trực tuyến **chưa chốt nhà cung cấp cụ thể** (chưa chọn cổng thanh toán); cần xác định phí thực và quy trình manual reconciliation. | **Chưa triển khai** (Phụ thuộc module Payments) |
-| **Phân công Xưởng (Assignment)** | FR-15, A04 | Trạng thái đơn được cập nhật trực tiếp qua API nội bộ (`OrdersController.UpdateStatus`) phục vụ demo luồng; không có danh bạ hay kết nối xưởng thật. | Theo giả định **A04**, THE BOYS làm việc với xưởng bên ngoài (PartnerLabs); Staff chọn xưởng đối tác active có năng lực, gửi offer, theo dõi accept/reject/expiry và SLA sản xuất. | **Chưa triển khai** (Phụ thuộc module PartnerLabs) |
-| **Kiểm định Chất lượng (QC)** | FR-16, A04 | Thẩm định kỹ thuật sơ bộ trên mô hình 3D (watertight, slice check) trước khi duyệt in (`ReviewGenerationTaskCommand`). | `ProductionRun` qua các bước Printing → PostProcessing → QC khi đã paid + approved + assignment accepted. QC đạt mới Packaged; hỏng tạo reprint run hoặc hỗ trợ, lưu actual cost và evidence. **SRS không bắt buộc quy trình "QC 2 lớp"** (đây là đề xuất thảo luận ngoài baseline, chưa được duyệt). | **Chưa triển khai** (Phụ thuộc module ProductionRun/QC) |
-| **Vận chuyển & Giao hàng** | FR-17 | Cập nhật thủ công trạng thái `Shipping` và chuỗi text `trackingNumber`. | Staff **P0 nhập thủ công** thông tin carrier/tracking hoặc hand-delivery evidence; ghi nhận sự kiện giao thất bại / giao lại / đã giao; trạng thái `Delivered` bắt buộc có bằng chứng giao hàng. Tích hợp tự động API hãng vận chuyển là **P1**, không thuộc P0. | **Chưa triển khai** (Phụ thuộc module Shipping) |
-| **Khiếu nại & Hoàn tiền** | FR-18, A05 | Hủy đơn Draft tại chỗ (`CancelOrderCommand`), ghi chú chuỗi văn bản `statusNote`. | Khách gửi defect report kèm >= 1 bằng chứng; Staff đánh giá, Admin duyệt refund hoặc Staff chốt reprint run theo policy; hỗ trợ nhiều evidence/resolution, không ghi đè lịch sử. | **Chưa triển khai** (Phụ thuộc module Claims & Refunds) |
+| **Cơ chế Phân quyền** | FR-20 (nền tảng) | 4 roles: `Customer`, `Staff`, `Admin`, `Manager`. Nhóm `Management` bao gồm `staff,manager,admin`. Kiểm tra DB trực tiếp trên mỗi request qua `OnTokenValidated`. | Quản trị vai trò (Customer, Staff, Manager, Admin), bảo vệ self-change và last-admin. Phạm vi FR-20 còn lại (version gói/policy bất biến toàn diện, phân tầng audit log sâu) được quản lý theo kế hoạch dự án. | **Hoàn tất scope Manager của MGR-001** |
+| **Thanh toán (Payment v2)** | FR-12, FR-13, A03 | Đã triển khai module Payment v2: PayOS / Sandbox gateway, tạo payment attempt, idempotency, webhook và manual reconciliation. Kiểm thử bằng fake gateway trong integration tests. | Thanh toán đủ VND trước khi in (FR-12/13). Môi trường production đang vận hành ở chế độ Sandbox gateway; việc ký kết và cấu hình credential live PayOS/SePay sẽ thực hiện tại môi trường triển khai thực tế. | **Đã triển khai mã nguồn & Sandbox tests** |
+| **Phân công Xưởng (Assignment)** | FR-15, A04 | Đã triển khai module Fulfillment v2: Quản lý PartnerLab, tạo phân công (offer), chấp nhận/từ chối phân công, theo dõi hạn chót sản xuất. | Theo giả định **A04**, THE BOYS làm việc với xưởng bên ngoài (PartnerLabs); hệ thống điều phối điện tử. Chưa tích hợp tự động hóa vật lý tại xưởng đối tác. | **Đã triển khai mã nguồn & integration tests** |
+| **Kiểm định Chất lượng (QC)** | FR-16, A04 | Đã triển khai ghi nhận kết quả QC sản xuất (`RecordProductionRunQc`), lưu bằng chứng storage key, kích hoạt in lại nếu QC thất bại. Thẩm định 3D sơ bộ trước khi in (`ReviewGenerationTask`). | `ProductionRun` qua các bước Printing → PostProcessing → QC khi đã paid + approved + assignment accepted. QC đạt mới Packaged; hỏng tạo reprint run hoặc ghi nhận actual cost. **SRS không bắt buộc quy trình "QC 2 lớp"**. | **Đã triển khai mã nguồn & integration tests** |
+| **Vận chuyển & Giao hàng** | FR-17 | Đã triển khai tạo vận đơn (`CreateShipment`), ghi nhận sự kiện chuyển phát (`RecordShipmentEvent`), lưu bằng chứng giao hàng (`DeliveryEvidenceStorageKey`). | Staff/Manager **P0 nhập thủ công** thông tin carrier/tracking hoặc hand-delivery evidence; ghi nhận sự kiện giao thất bại / giao lại / đã giao. Tích hợp tự động API hãng vận chuyển là **P1**, không thuộc P0. | **Đã triển khai mã nguồn P0 thủ công** |
+| **Khiếu nại & Hoàn tiền** | FR-18, A05 | Đã triển khai tiếp nhận khiếu nại (`CreateDefectReport`), giải quyết khiếu nại (`ResolveDefectReport`), tạo giao dịch hoàn tiền (`CreateRefund`), đối soát hoàn tiền (`ReconcileRefund`). | Khách gửi defect report kèm bằng chứng; Staff/Manager giải quyết in lại hoặc từ chối; chỉ Staff/Admin mới được duyệt hoàn tiền và tạo lệnh hoàn tiền. | **Đã triển khai mã nguồn & integration tests** |
 
 > [!NOTE]
-> MGR-001 thiết lập **nền tảng vai trò Manager (Manager Role Foundation)** và các luồng vận hành hiện có của hệ thống. Task này **không tuyên bố hoàn tất toàn bộ yêu cầu P0** của SRS do các phân hệ thanh toán trực tuyến, phân công xưởng đối tác bên ngoài, quản lý sản xuất/QC và giải quyết khiếu nại chưa được xây dựng.
+> MGR-001 thiết lập **nền tảng vai trò Manager (Manager Role Foundation)** trong kiến trúc tổng thể của BE-Print3D. Việc các module v2 (Payment, Fulfillment, QC, Defects) đã có mã nguồn và test suite hoàn chỉnh trong `origin/main` giúp Manager thực hiện đầy đủ chức năng điều phối vận hành thực tế, đồng thời tuân thủ nghiêm ngặt rào chắn an toàn tài chính (không cấp quyền hoàn tiền cho Manager).
 
 ---
 
-## 5. Giới hạn Kỹ thuật & Ghi chú Kiến trúc Cache
+## 5. Giới hạn Kỹ thuật & Ghi chú Kiến trúc Token Validation
 
-- **Phạm vi Invalidation của Cache**:
-  - Hiện tại, `UserRoleCache` sử dụng `IMemoryCache` nội bộ của tiến trình Web API ([UserRoleCache.cs](../../src/TheBoys.Infrastructure/Services/UserRoleCache.cs)).
-  - Khi Admin cập nhật role của người dùng qua `UpdateUserRoleCommandHandler`, cache cục bộ của instance tiếp nhận lệnh sẽ được xóa ngay lập tức (`userRoleCache.Remove`).
-  - Request kế tiếp trong cùng instance API sẽ đọc trực tiếp từ SQL Database và cập nhật lại claim trên `ClaimsIdentity`.
-- **Giới hạn trong Môi trường Đa Instance (Multi-instance Limitation)**:
-  - Trong kịch bản triển khai cụm cân bằng tải (load balancer) với nhiều instance backend phân tán, việc xóa `IMemoryCache` ở instance A sẽ **không** tự động xóa bộ nhớ đệm ở instance B.
-  - Khi mở rộng quy mô hệ thống, cần thay thế bộ nhớ đệm cục bộ bằng cơ chế phân tán (Distributed Cache như Redis Cache) hoặc bổ sung cơ chế truyền tin (Pub/Sub Event Bus) để thông báo xóa cache đồng bộ trên toàn bộ cụm máy chủ.
+- **Cơ chế Xác thực Trực tiếp từ Cơ sở Dữ liệu (`OnTokenValidated`)**:
+  - Tại kiến trúc hiện tại của hệ thống ([Program.cs](../../src/TheBoys.WebApi/Program.cs#L100-L135)), sự kiện `JwtBearerEvents.OnTokenValidated` thực hiện truy vấn trực tiếp vào SQL Database (`db.Users.AsNoTracking()`) trên **mỗi request** để kiểm tra trạng thái hoạt động của tài khoản (`AccountStatus`, `LockoutEndUtc`) và trích xuất vai trò hiện thời (`user.Role`).
+  - Sau khi lấy role thực tế từ cơ sở dữ liệu, claim `role` trên `ClaimsIdentity` được gán lại ngay lập tức theo giá trị DB (`identity.AddClaim(new Claim("role", cachedRole))`).
+  - Nhờ cơ chế này, bất kỳ sự thay đổi vai trò nào do Admin thực hiện (như cấp hoặc thu hồi quyền Manager) đều **có hiệu lực ngay lập tức tại request kế tiếp** trên cùng instance mà không bị phụ thuộc vào thời gian tồn tại (TTL) của bộ nhớ đệm.
+- **Vai trò của Bộ nhớ đệm Cục bộ (`IUserRoleCache`)**:
+  - Bộ nhớ đệm in-memory `IUserRoleCache` đóng vai trò hỗ trợ đọc nhanh và được đồng bộ mỗi khi token được xác thực.
+  - Do tính năng xác thực truy vấn DB trực tiếp, hệ thống đạt tính nhất quán cao về phân quyền mà không xảy ra tình trạng cấp lậu quyền cho token cũ quá thời hạn.
