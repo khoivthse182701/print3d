@@ -6,6 +6,7 @@ using Microsoft.Extensions.Options;
 using TheBoys.Application.Printing;
 using TheBoys.Domain.Entities;
 using TheBoys.Domain.Enums;
+using GenerationStage = TheBoys.Domain.Enums.GenerationStage;
 using TheBoys.Infrastructure.Printing;
 
 namespace TheBoys.Tests;
@@ -26,7 +27,7 @@ public class TripoContractTests
             {
                 "/v3/files" => Json("{\"code\":0,\"data\":{\"file_token\":\"file_demo\"}}"),
                 "/v3/generation/image-to-model" => Json("{\"code\":0,\"data\":{\"task_id\":\"task_generate\"}}"),
-                "/v3/tasks/task_generate" => Json("{\"code\":0,\"data\":{\"status\":\"success\",\"progress\":100,\"output\":{\"model_url\":\"https://cdn.tripo3d.ai/model.glb\"}}}"),
+                "/v3/tasks/task_generate" => Json("{\"code\":0,\"data\":{\"status\":\"success\",\"progress\":100,\"output\":{\"model_url\":\"https://cdn.tripo3d.ai/model.glb\"},\"usage\":{\"credits\":2.5}}}"),
                 _ => throw new InvalidOperationException(request.RequestUri.AbsolutePath)
             };
         })) { BaseAddress = new Uri("https://openapi.tripo3d.ai/v3/") };
@@ -39,6 +40,7 @@ public class TripoContractTests
         Assert.False(provider.RequiresResizeStage);
         Assert.Equal("Tripo", provider.Name);
         Assert.Equal("SUCCEEDED", result.Status);
+        Assert.Equal(2.5m, result.ProviderCredits);
         Assert.Equal("https://cdn.tripo3d.ai/model.glb", result.ModelUrls["glb"]);
         Assert.Equal(new[] { "/v3/files", "/v3/generation/image-to-model", "/v3/tasks/task_generate" }, requests.Select(x => x.Path));
         var generate = JsonDocument.Parse(requests[1].Body!).RootElement;
@@ -69,6 +71,43 @@ public class TripoContractTests
         Assert.Equal("task_generate", body.GetProperty("input").GetString());
         Assert.Equal("STL", body.GetProperty("format").GetString());
         Assert.True(body.GetProperty("flatten_bottom").GetBoolean());
+    }
+
+    [Fact]
+    public async Task AmbiguousConvert500ReturnsUncertain()
+    {
+        using var http = new HttpClient(new Handler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.InternalServerError))))
+        {
+            BaseAddress = new Uri("https://openapi.tripo3d.ai/v3/")
+        };
+        var provider = Provider(http, new TestStorage());
+        var error = await Assert.ThrowsAsync<ProviderException>(() => provider.CreateAsync(new GenerationTask
+        {
+            Stage = GenerationStage.Convert,
+            ProviderTaskId = "task_generate"
+        }, default));
+
+        Assert.True(error.Uncertain);
+        Assert.False(error.Transient);
+    }
+
+    [Fact]
+    public async Task Poll429ReturnsTransient()
+    {
+        using var http = new HttpClient(new Handler(_ =>
+        {
+            var res = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+            res.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(15));
+            return Task.FromResult(res);
+        }))
+        {
+            BaseAddress = new Uri("https://openapi.tripo3d.ai/v3/")
+        };
+        var provider = Provider(http, new TestStorage());
+        var error = await Assert.ThrowsAsync<ProviderException>(() => provider.GetAsync(GenerationStage.Generate, "task_1", default));
+
+        Assert.True(error.Transient);
+        Assert.False(error.Uncertain);
     }
 
     [Fact]

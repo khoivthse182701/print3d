@@ -21,18 +21,18 @@ public sealed class TripoProvider(HttpClient http, IModelStorage storage, IOptio
     {
         return task.Stage switch
         {
-            GenerationStage.Generate => await GenerateAsync(task, ct),
-            GenerationStage.Convert => await ConvertToStlAsync(task, ct),
-            GenerationStage.Analyze => CreateLocalAnalysisId(task),
-            GenerationStage.Resize => throw new ProviderException("Tripo không dùng bước resize riêng."),
+            TheBoys.Domain.Enums.GenerationStage.Generate => await GenerateAsync(task, ct),
+            TheBoys.Domain.Enums.GenerationStage.Convert => await ConvertToStlAsync(task, ct),
+            TheBoys.Domain.Enums.GenerationStage.Analyze => CreateLocalAnalysisId(task),
+            TheBoys.Domain.Enums.GenerationStage.Resize => throw new ProviderException("Tripo không dùng bước resize riêng."),
             _ => throw new ArgumentOutOfRangeException(nameof(task))
         };
     }
 
-    public async Task<ProviderTask> GetAsync(GenerationStage stage, string taskId, CancellationToken ct)
+    public async Task<ProviderTask> GetAsync(TheBoys.Domain.Enums.GenerationStage stage, string taskId, CancellationToken ct)
     {
-        if (stage == GenerationStage.Analyze) return AnalyzeLocal(taskId);
-        if (stage == GenerationStage.Resize) throw new ProviderException("Tripo không dùng bước resize riêng.");
+        if (stage == TheBoys.Domain.Enums.GenerationStage.Analyze) return AnalyzeLocal(taskId);
+        if (stage == TheBoys.Domain.Enums.GenerationStage.Resize) throw new ProviderException("Tripo không dùng bước resize riêng.");
 
         using var request = Request(HttpMethod.Get, $"tasks/{Uri.EscapeDataString(taskId)}");
         var data = await SendForDataAsync(request, creating: false, ct);
@@ -54,15 +54,20 @@ public sealed class TripoProvider(HttpClient http, IModelStorage storage, IOptio
             {
                 if (output.TryGetProperty("model_url", out var modelUrl) && modelUrl.ValueKind == JsonValueKind.String
                     && !string.IsNullOrWhiteSpace(modelUrl.GetString()))
-                    urls[stage == GenerationStage.Convert ? "stl" : "glb"] = modelUrl.GetString()!;
+                    urls[stage == TheBoys.Domain.Enums.GenerationStage.Convert ? "stl" : "glb"] = modelUrl.GetString()!;
                 if (output.TryGetProperty("rendered_image_url", out var rendered) && rendered.ValueKind == JsonValueKind.String)
                     thumbnail = rendered.GetString();
             }
             var error = data.TryGetProperty("error_message", out var errorMessage) && errorMessage.ValueKind == JsonValueKind.String
                 ? errorMessage.GetString() : null;
+
+            decimal? credits = null;
+            if (data.TryGetProperty("usage", out var usageElem) && usageElem.TryGetProperty("credits", out var credVal) && credVal.TryGetDecimal(out var c))
+                credits = c;
+
             return new(status,
                 data.TryGetProperty("progress", out var progress) && progress.TryGetInt32(out var value) ? value : 0,
-                urls, null, thumbnail, error, Math.Clamp(options.Value.PollIntervalSeconds, 2, 60));
+                urls, null, thumbnail, error, Math.Clamp(options.Value.PollIntervalSeconds, 2, 60), credits);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException)
         {
@@ -182,9 +187,22 @@ public sealed class TripoProvider(HttpClient http, IModelStorage storage, IOptio
         {
             var body = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode)
+            {
+                var retryAfter = response.Headers.RetryAfter?.Delta?.TotalSeconds ??
+                    (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow)?.TotalSeconds ?? options.Value.PollIntervalSeconds;
+
+                if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                {
+                    throw new ProviderException($"Tripo đang giới hạn tần suất yêu cầu (HTTP 429). Cần đợi {(int)Math.Clamp(retryAfter, 2, 300)}s.",
+                        uncertain: false,
+                        transient: true);
+                }
+
                 throw new ProviderException($"Tripo trả HTTP {(int)response.StatusCode}. Kiểm tra API key, số dư hoặc task.",
                     uncertain: creating && (int)response.StatusCode >= 500,
                     transient: !creating && (response.StatusCode == HttpStatusCode.TooManyRequests || (int)response.StatusCode >= 500));
+            }
+
             try
             {
                 using var json = JsonDocument.Parse(body);

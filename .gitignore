@@ -36,9 +36,16 @@ TestResults/
 .env.*
 !.env.example
 appsettings.Local.json
+**/appsettings.Local.json
+appsettings.Production.json
+**/appsettings.Production.json
+**/appsettings.*.local.json
 
 ## Documentation tooling and generated artifacts
 node_modules/
 artifacts/
 **/.env.local
-**/appsettings.*.local.json
+
+## AI Agent configurations and skills
+.agents/
+.agent/

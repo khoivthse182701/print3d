@@ -22,6 +22,19 @@ public sealed class TripoOptions
     public string[] AssetHosts { get; set; } = ["cdn.tripo3d.ai", "*.data.tripo3d.com"];
 }
 
+public sealed class Hunyuan3DOptions
+{
+    public string BaseUrl { get; set; } = "https://hunyuan.intl.tencentcloudapi.com";
+    public string Service { get; set; } = "hunyuan";
+    public string Version { get; set; } = "2023-09-01";
+    public string Region { get; set; } = "ap-singapore";
+    public string SecretId { get; set; } = "";
+    public string SecretKey { get; set; } = "";
+    public string DefaultEngine { get; set; } = "express";
+    public int PollIntervalSeconds { get; set; } = 5;
+    public string[] AssetHosts { get; set; } = ["*.myqcloud.com", "*.tencentcos.cn", "*.tencentcloudapi.com"];
+}
+
 public sealed class PrintPricingOptions
 {
     public decimal DemoUnitPriceVnd { get; set; } = 390000;
@@ -55,7 +68,7 @@ public sealed class PrintPricingService
 }
 
 public sealed record ProviderTask(string Status, int Progress, IReadOnlyDictionary<string, string> ModelUrls,
-    JsonElement? Printability, string? ThumbnailUrl, string? Error, int RetryAfterSeconds = 5);
+    JsonElement? Printability, string? ThumbnailUrl, string? Error, int RetryAfterSeconds = 5, decimal? ProviderCredits = null);
 
 public interface IModelGenerationProvider
 {
@@ -64,7 +77,7 @@ public interface IModelGenerationProvider
     string Model { get; }
     bool RequiresResizeStage => true;
     Task<string> CreateAsync(GenerationTask task, CancellationToken ct);
-    Task<ProviderTask> GetAsync(GenerationStage stage, string taskId, CancellationToken ct);
+    Task<ProviderTask> GetAsync(TheBoys.Domain.Enums.GenerationStage stage, string taskId, CancellationToken ct);
 }
 
 public interface IModelStorage

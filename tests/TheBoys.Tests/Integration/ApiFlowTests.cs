@@ -130,8 +130,21 @@ public class ApiFlowTests(DemoFactory factory) : IClassFixture<DemoFactory>
     {
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var user = new User { Email = $"{Guid.NewGuid():N}@example.test", FullName = "Test" };
-        db.Users.Add(user); await db.SaveChangesAsync(); return user.Id;
+        var user = new User
+        {
+            Email = $"{Guid.NewGuid():N}@example.test",
+            FullName = "Test",
+            AccountStatus = AccountStatus.Active,
+            EmailVerifiedAtUtc = DateTime.UtcNow,
+            FreeTrialRemaining = 2
+        };
+        db.Users.Add(user);
+        var account = CreditAccount.Create(user.Id, trialBalance: 2, purchasedBalance: 0);
+        db.CreditAccounts.Add(account);
+        var consent = ConsentRecord.Record(user.Id, "AiModelProcessing", "v1.0", true, DateTime.UtcNow);
+        db.ConsentRecords.Add(consent);
+        await db.SaveChangesAsync();
+        return user.Id;
     }
 
     [Fact]
@@ -142,7 +155,10 @@ public class ApiFlowTests(DemoFactory factory) : IClassFixture<DemoFactory>
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var user = await db.Users.SingleAsync(x => x.Id == userId);
-            user.FreeTrialRemaining = 1; await db.SaveChangesAsync();
+            user.FreeTrialRemaining = 1;
+            var account = await db.CreditAccounts.SingleAsync(x => x.UserId == userId);
+            account.Debit();
+            await db.SaveChangesAsync();
         }
         using var first = await factory.Client(userId); using var second = await factory.Client(userId);
         var results = await Task.WhenAll(Upload(first, Guid.NewGuid().ToString()), Upload(second, Guid.NewGuid().ToString()));

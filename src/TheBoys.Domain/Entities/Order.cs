@@ -7,7 +7,8 @@ public sealed class Order : BaseEntity
 {
     public string OrderCode { get; set; } = default!; // 'TB-ORD-20261019-0001'
     public Guid UserId { get; set; }
-    public Guid GenerationTaskId { get; set; }
+    public Guid? QuoteId { get; set; }
+    public Guid? GenerationTaskId { get; set; }
     public Guid PricingPackageId { get; set; }
     public Guid? PartnerLabId { get; set; }
     public string ClientRequestId { get; set; } = Guid.NewGuid().ToString("N");
@@ -18,6 +19,12 @@ public sealed class Order : BaseEntity
     public decimal HeightMmSnapshot { get; set; }
     public string MaterialSnapshot { get; set; } = "";
     public OrderStatus Status { get; set; } = OrderStatus.Draft;
+    public string FulfillmentStatus { get; set; } = "PendingPayment";
+    public string OrderPaymentStatus { get; set; } = "Unpaid";
+    public string Currency { get; set; } = "VND";
+    public string? AddressSnapshotJson { get; set; }
+    public string? PolicyVersion { get; set; }
+    public DateTime? CancellationRequestedAtUtc { get; set; }
 
     // Strategic Financial Snapshots (Bảo toàn số liệu P&L theo nguyên tắc CP3)
     public decimal UnitPriceSnapshot { get; set; } // 390.000 hoặc 300.000 VNĐ
@@ -64,10 +71,18 @@ public sealed class Order : BaseEntity
 
     // Navigation
     public User? User { get; set; }
+    public Quote? Quote { get; set; }
     public GenerationTask? GenerationTask { get; set; }
     public PricingPackage PricingPackage { get; set; } = default!;
     public PartnerLab? PartnerLab { get; set; }
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
+    public ICollection<PaymentAttempt> PaymentAttempts { get; set; } = new List<PaymentAttempt>();
+    public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
+    public ICollection<OrderStatusHistory> StatusHistories { get; set; } = new List<OrderStatusHistory>();
+    public ICollection<OrderCancellationRequest> CancellationRequests { get; set; } = new List<OrderCancellationRequest>();
+    public ICollection<PartnerAssignment> PartnerAssignments { get; set; } = new List<PartnerAssignment>();
+    public ICollection<Shipment> Shipments { get; set; } = new List<Shipment>();
+    public ICollection<DefectReport> DefectReports { get; set; } = new List<DefectReport>();
 }
 
 public sealed class Payment : BaseEntity

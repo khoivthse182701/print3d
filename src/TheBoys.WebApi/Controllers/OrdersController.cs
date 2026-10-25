@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.Security.Cryptography;
 using System.Text.Json;
 using MediatR;
@@ -91,7 +91,7 @@ public sealed class OrdersController(ISender mediator) : ApiControllerBase
 
     private static object View(Order o) => new
     {
-        o.Id, o.OrderCode, o.UserId, o.GenerationTaskId, o.PricingPackageId, o.Status, o.Quantity,
+        o.Id, o.OrderCode, o.UserId, o.GenerationTaskId, o.PricingPackageId, o.Status, fulfillmentStatus = o.FulfillmentStatus, orderPaymentStatus = o.OrderPaymentStatus, o.Quantity,
         unitPriceVnd = o.UnitPriceSnapshot, subtotalVnd = o.SubTotalVnd,
         shippingFeeVnd = o.FinalShippingFee, totalVnd = o.TotalAmount, material = o.MaterialSnapshot,
         dimensions = new { widthMm = o.WidthMmSnapshot, depthMm = o.DepthMmSnapshot, heightMm = o.HeightMmSnapshot },

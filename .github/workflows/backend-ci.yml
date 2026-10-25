@@ -19,6 +19,8 @@ jobs:
       - run: dotnet tool restore
       - run: dotnet restore TheBoys.slnx
       - run: dotnet build TheBoys.slnx --no-restore --configuration Release
+      - name: Scan for vulnerable NuGet packages
+        run: dotnet list TheBoys.slnx package --vulnerable --include-transitive
       - name: Unit, contract and SQL integration tests
         shell: pwsh
         env:

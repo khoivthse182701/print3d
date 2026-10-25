@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using TheBoys.Application.Printing;
 using TheBoys.Domain.Entities;
 using TheBoys.Domain.Enums;
+using GenerationStage = TheBoys.Domain.Enums.GenerationStage;
 using TheBoys.Infrastructure.Printing;
 
 namespace TheBoys.Tests;
@@ -49,16 +50,45 @@ public class MeshyContractTests
     }
 
     [Fact]
+    public async Task CreateNetworkExceptionIsUncertainAndNotTransient()
+    {
+        using var http = new HttpClient(new Handler(_ => throw new HttpRequestException("Socket timeout during POST")))
+        {
+            BaseAddress = new Uri("https://api.meshy.ai/")
+        };
+        var error = await Assert.ThrowsAsync<ProviderException>(() => Provider(http).CreateAsync(new GenerationTask { Stage = GenerationStage.Generate, InputImageUrl = "input.png" }, default));
+        Assert.True(error.Uncertain);
+        Assert.False(error.Transient);
+        Assert.Contains("đối soát task", error.Message);
+    }
+
+    [Fact]
     public async Task Poll429IsRetryableAndPreservesTheExistingTask()
     {
         using var http = new HttpClient(new Handler(request =>
         {
             Assert.Equal(HttpMethod.Get, request.Method);
             Assert.Equal("/openapi/v1/image-to-3d/existing", request.RequestUri!.AbsolutePath);
-            return Task.FromResult(Json(HttpStatusCode.TooManyRequests, "{}"));
+            var response = Json(HttpStatusCode.TooManyRequests, "{}");
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(30));
+            return Task.FromResult(response);
         })) { BaseAddress = new Uri("https://api.meshy.ai/") };
         var error = await Assert.ThrowsAsync<ProviderException>(() => Provider(http).GetAsync(GenerationStage.Generate, "existing", default));
         Assert.True(error.Transient); Assert.False(error.Uncertain);
+    }
+
+    [Fact]
+    public async Task GetParsesCreditsSuccessfully()
+    {
+        using var http = new HttpClient(new Handler(request =>
+        {
+            return Task.FromResult(Json(HttpStatusCode.OK, "{\"status\":\"SUCCEEDED\",\"progress\":100,\"credits\":3.5,\"model_urls\":{\"glb\":\"https://assets.meshy.ai/model.glb\"}}"));
+        })) { BaseAddress = new Uri("https://api.meshy.ai/") };
+
+        var result = await Provider(http).GetAsync(GenerationStage.Generate, "existing", default);
+        Assert.Equal("SUCCEEDED", result.Status);
+        Assert.Equal(3.5m, result.ProviderCredits);
+        Assert.Equal("https://assets.meshy.ai/model.glb", result.ModelUrls["glb"]);
     }
 
     private static MeshyProvider Provider(HttpClient http) => new(http, new TestStorage(), Options.Create(new MeshyOptions { ApiKey = "test-key" }));

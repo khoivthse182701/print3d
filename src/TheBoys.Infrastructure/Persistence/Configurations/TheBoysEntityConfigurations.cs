@@ -5,7 +5,7 @@ using TheBoys.Domain.Entities;
 namespace TheBoys.Infrastructure.Persistence.Configurations;
 
 // ==============================================================================
-// BẢNG 1: Users (Đã gộp UserCredits: Quota 2 lượt dùng thử)
+// Báº¢NG 1: Users (ÄÃ£ gá»™p UserCredits: Quota 2 lÆ°á»£t dÃ¹ng thá»­)
 // ==============================================================================
 public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 {
@@ -21,6 +21,27 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.Email)
             .HasMaxLength(255)
             .IsRequired();
+
+        builder.Property(x => x.NormalizedEmail)
+            .HasMaxLength(255)
+            .IsRequired();
+
+        builder.Property(x => x.AccountStatus)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .IsUnicode(false)
+            .HasDefaultValue(TheBoys.Domain.Enums.AccountStatus.Unverified)
+            .IsRequired();
+
+        builder.Property(x => x.EmailVerifiedAtUtc)
+            .HasPrecision(3);
+
+        builder.Property(x => x.FailedLoginAttempts)
+            .HasDefaultValue(0)
+            .IsRequired();
+
+        builder.Property(x => x.LockoutEndUtc)
+            .HasPrecision(3);
 
         builder.Property(x => x.FullName)
             .HasMaxLength(150)
@@ -56,6 +77,11 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .IsUnique()
             .HasFilter("[IsDeleted] = 0");
 
+        builder.HasIndex(x => x.NormalizedEmail)
+            .HasDatabaseName("UX_Users_NormalizedEmail_Active")
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
+
         builder.HasIndex(x => x.DeviceFingerprint)
             .HasDatabaseName("IX_Users_DeviceFingerprint")
             .HasFilter("[DeviceFingerprint] IS NOT NULL AND [IsDeleted] = 0");
@@ -63,7 +89,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 }
 
 // ==============================================================================
-// BẢNG 2: PricingPackages (Danh mục gói thành phẩm cá nhân hóa)
+// Báº¢NG 2: PricingPackages (Danh má»¥c gÃ³i thÃ nh pháº©m cÃ¡ nhÃ¢n hÃ³a)
 // ==============================================================================
 public sealed class PricingPackageConfiguration : IEntityTypeConfiguration<PricingPackage>
 {
@@ -112,7 +138,7 @@ public sealed class PricingPackageConfiguration : IEntityTypeConfiguration<Prici
 }
 
 // ==============================================================================
-// BẢNG 3: PartnerLabs (Xưởng in 3D đối tác TP.HCM)
+// Báº¢NG 3: PartnerLabs (XÆ°á»Ÿng in 3D Ä‘á»‘i tÃ¡c TP.HCM)
 // ==============================================================================
 public sealed class PartnerLabConfiguration : IEntityTypeConfiguration<PartnerLab>
 {
@@ -137,7 +163,7 @@ public sealed class PartnerLabConfiguration : IEntityTypeConfiguration<PartnerLa
 }
 
 // ==============================================================================
-// BẢNG 4: GenerationTasks (Đã gộp ModelAssets: Quản lý tác vụ & file 3D)
+// Báº¢NG 4: GenerationTasks (ÄÃ£ gá»™p ModelAssets: Quáº£n lÃ½ tÃ¡c vá»¥ & file 3D)
 // ==============================================================================
 public sealed class GenerationTaskConfiguration : IEntityTypeConfiguration<GenerationTask>
 {
@@ -168,6 +194,7 @@ public sealed class GenerationTaskConfiguration : IEntityTypeConfiguration<Gener
         builder.Property(x => x.EstimatedVolumeCm3).HasPrecision(18, 4);
 
         builder.Property(x => x.RowVersion).IsRowVersion();
+
         builder.HasQueryFilter(x => !x.IsDeleted);
 
         builder.HasIndex(x => new { x.UserId, x.Status, x.CreatedAtUtc })
@@ -186,7 +213,7 @@ public sealed class GenerationTaskConfiguration : IEntityTypeConfiguration<Gener
 }
 
 // ==============================================================================
-// BẢNG 5: Orders (Đã gộp Defect 5% & Mốc thời gian Timeline)
+// Báº¢NG 5: Orders (ÄÃ£ gá»™p Defect 5% & Má»‘c thá»i gian Timeline)
 // ==============================================================================
 public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
 {
@@ -221,7 +248,7 @@ public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(x => x.ReceiverPhone).HasMaxLength(20).IsUnicode(false).IsRequired();
         builder.Property(x => x.StreetAddress).HasMaxLength(300).IsRequired();
         builder.Property(x => x.District).HasMaxLength(100).IsRequired();
-        builder.Property(x => x.City).HasMaxLength(100).HasDefaultValue("Thành phố Hồ Chí Minh").IsRequired();
+        builder.Property(x => x.City).HasMaxLength(100).HasDefaultValue("ThÃ nh phá»‘ Há»“ ChÃ­ Minh").IsRequired();
         builder.Property(x => x.CustomEngravingText).HasMaxLength(150);
         builder.Property(x => x.CustomerNote).HasMaxLength(500);
         builder.Property(x => x.TrackingNumber).HasMaxLength(100).IsUnicode(false);
@@ -233,7 +260,18 @@ public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
 
         builder.Property(x => x.RowVersion).IsRowVersion();
 
+
         builder.HasIndex(x => x.OrderCode).HasDatabaseName("UX_Orders_OrderCode").IsUnique();
+
+        builder.Property(x => x.QuoteId);
+        builder.Property(x => x.FulfillmentStatus).HasMaxLength(30).IsUnicode(false).HasDefaultValue("PendingPayment").IsRequired();
+        builder.Property(x => x.OrderPaymentStatus).HasMaxLength(30).IsUnicode(false).HasDefaultValue("Unpaid").IsRequired();
+        builder.Property(x => x.Currency).HasMaxLength(3).IsUnicode(false).HasDefaultValue("VND").IsRequired();
+        builder.Property(x => x.AddressSnapshotJson);
+        builder.Property(x => x.PolicyVersion).HasMaxLength(40).IsUnicode(false);
+        builder.Property(x => x.CancellationRequestedAtUtc).HasPrecision(3);
+        builder.HasIndex(x => x.QuoteId).HasDatabaseName("UX_Orders_QuoteId").IsUnique().HasFilter("[QuoteId] IS NOT NULL");
+        builder.HasOne(x => x.Quote).WithOne(q => q.Order).HasForeignKey<Order>(x => x.QuoteId).IsRequired(false).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => new { x.UserId, x.Status, x.CreatedAtUtc })
             .HasDatabaseName("IX_Orders_User_Status_ESR")
@@ -254,6 +292,7 @@ public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasOne(x => x.GenerationTask)
             .WithMany()
             .HasForeignKey(x => x.GenerationTaskId)
+            .IsRequired(false)
             .OnDelete(DeleteBehavior.Restrict);
 
         // Tell EF Core that while GenerationTaskId is required in DB,
@@ -274,7 +313,7 @@ public sealed class OrderConfiguration : IEntityTypeConfiguration<Order>
 }
 
 // ==============================================================================
-// BẢNG 6: Payments (Giao dịch thanh toán trực tuyến)
+// Báº¢NG 6: Payments (Giao dá»‹ch thanh toÃ¡n trá»±c tuyáº¿n)
 // ==============================================================================
 public sealed class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 {
