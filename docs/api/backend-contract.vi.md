@@ -1,6 +1,6 @@
 # Hợp đồng BE–FE
 
-FE và BE riêng repo. Bảng API hiện tại ở [inventory](../review/flow-inventory.vi.md); route v2 dưới đây là **đề xuất chưa triển khai**. OpenAPI runtime hiện tại là nguồn contract cho FE đang chạy, không dùng endpoint v2 trước khi PR tương ứng được merge/deploy.
+FE và BE riêng repo. Bảng API hiện tại ở [inventory](../review/flow-inventory.vi.md); phân quyền 4 vai trò (Customer, Staff, Manager, Admin) chi tiết tại [đặc tả role Manager](../requirements/manager-role.vi.md); route v2 dưới đây là **đề xuất chưa triển khai**. OpenAPI runtime hiện tại là nguồn contract cho FE đang chạy, không dùng endpoint v2 trước khi PR tương ứng được merge/deploy.
 
 ## Quy tắc chung v2
 
