@@ -5,7 +5,7 @@ namespace TheBoys.Application.Staff.Models;
 public sealed record StaffOrderItem(
     Guid Id,
     string OrderCode,
-    Guid GenerationTaskId,
+    Guid? GenerationTaskId,
     OrderStatus Status,
     int Quantity,
     DateTime CreatedAtUtc,
