@@ -80,18 +80,29 @@ public class ManagerRoleFlowTests(DemoFactory factory) : IClassFixture<DemoFacto
         var invalidRoleRes = await adminClient.PatchAsJsonAsync($"/api/admin/users/{tempTargetId}/role", new { role = "superuser" });
         Assert.Equal(HttpStatusCode.BadRequest, invalidRoleRes.StatusCode);
 
-        // Self-role change guard: Admin cannot change own role (409 Conflict)
+        // Self-role change guard: Admin cannot change own role via HTTP (409 Conflict: CannotChangeOwnRole)
         var selfRoleRes = await adminClient.PatchAsJsonAsync($"/api/admin/users/{factory.AdminId}/role", new { role = "manager" });
         Assert.Equal(HttpStatusCode.Conflict, selfRoleRes.StatusCode);
 
-        // Last admin guard: demoting only admin is prevented (409 Conflict)
-        // Verify via a single admin scenario: create temp admin, verify LastAdmin guard
+        // Two-admin scenario: creating a second admin allows demoting that second admin
         var tempAdminId = await NewCustomer();
         await adminClient.PatchAsJsonAsync($"/api/admin/users/{tempAdminId}/role", new { role = "admin" });
-        // Now there are 2 admins: admin can demote tempAdmin
         Assert.Equal(HttpStatusCode.OK,
             (await adminClient.PatchAsJsonAsync($"/api/admin/users/{tempAdminId}/role", new { role = "cus" })).StatusCode);
-        // Only 1 admin left (factory.AdminId). Attempting to demote would hit self-guard or last admin guard if targeted
+
+        // LastAdmin domain guard: when caller ID differs from target ID (bypassing CannotChangeOwnRole)
+        // and target is the sole remaining admin, UpdateUserRoleCommandHandler enforces the LastAdmin invariant
+        using (var scope = factory.Services.CreateScope())
+        {
+            var mediator = scope.ServiceProvider.GetRequiredService<MediatR.ISender>();
+            var lastAdminResult = await mediator.Send(new TheBoys.Application.Admin.Commands.UpdateUserRoleCommand(
+                CurrentAdminUserId: Guid.NewGuid(),
+                TargetUserId: factory.AdminId,
+                Role: "cus"));
+            Assert.True(lastAdminResult.IsFailure);
+            Assert.Equal("LastAdmin", lastAdminResult.Error.Code);
+            Assert.Equal("Phải giữ ít nhất một Admin.", lastAdminResult.Error.Message);
+        }
     }
 
     [Fact]
