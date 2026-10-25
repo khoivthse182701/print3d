@@ -190,7 +190,7 @@ public sealed class AuthController(
         var existingTokens = await db.IdentityTokens
             .Where(x => x.UserId == user.Id && x.Purpose == IdentityTokenPurpose.VerifyEmail && x.ConsumedAtUtc == null)
             .ToListAsync(ct);
-        foreach (var t in existingTokens) t.Consume(clock.UtcNow);
+        foreach (var t in existingTokens) t.Invalidate(clock.UtcNow);
 
         var (rawToken, tokenHash) = TokenService.GenerateOtpCode(6);
         var identityToken = IdentityToken.Create(
@@ -396,7 +396,7 @@ public sealed class AuthController(
         var existingTokens = await db.IdentityTokens
             .Where(x => x.UserId == user.Id && x.Purpose == IdentityTokenPurpose.ResetPassword && x.ConsumedAtUtc == null)
             .ToListAsync(ct);
-        foreach (var t in existingTokens) t.Consume(clock.UtcNow);
+        foreach (var t in existingTokens) t.Invalidate(clock.UtcNow);
 
         var (rawToken, tokenHash) = TokenService.GenerateOtpCode(6);
         var resetToken = IdentityToken.Create(

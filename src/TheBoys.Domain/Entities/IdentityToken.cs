@@ -44,5 +44,10 @@ public sealed class IdentityToken : BaseEntity
         if (!IsValid(utcNow)) throw new InvalidOperationException("Token không hợp lệ hoặc đã hết hạn.");
         ConsumedAtUtc = utcNow;
     }
+
+    public void Invalidate(DateTime utcNow)
+    {
+        ConsumedAtUtc ??= utcNow;
+    }
 }
 
