@@ -1071,6 +1071,308 @@ public class ManagerRoleFlowTests(DemoFactory factory) : IClassFixture<DemoFacto
         }
     }
 
+    [Fact]
+    public async Task AC09_ManagerRefundReconciliationGuardsAgainstManualConfirmation()
+    {
+        using var manager = await factory.Client(factory.ManagerId);
+        using var staff = await factory.Client(factory.StaffId);
+        using var admin = await factory.Client(factory.AdminId);
+        using var customer = await factory.Client(factory.CustomerId);
+
+        var testAmount = 450000m;
+
+        // SCENARIO 1: Manager calling Reconcile on offline unsupported gateway (PayOS/SePay/Simulated Offline) -> 403 Forbidden & Zero Mutations
+        Order offlineOrder;
+        Refund offlineRefund;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            offlineOrder = new Order
+            {
+                Id = Guid.NewGuid(),
+                OrderCode = $"TB-OFF-{Guid.NewGuid():N}",
+                UserId = factory.CustomerId,
+                QuoteId = null,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                Status = OrderStatus.Cancelled,
+                FulfillmentStatus = "Cancelled",
+                OrderPaymentStatus = "NeedsAttention",
+                Currency = "VND",
+                Quantity = 1,
+                UnitPriceSnapshot = testAmount,
+                PartnerCostSnapshot = 120000m,
+                SubTotalVnd = testAmount,
+                ShippingFeeRaw = 0,
+                FinalShippingFee = 0,
+                TotalAmount = testAmount,
+                ReceiverName = "Offline Customer",
+                ReceiverPhone = "0901234567",
+                StreetAddress = "123 Le Loi",
+                District = "District 1",
+                City = "Ho Chi Minh",
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Orders.Add(offlineOrder);
+
+            var attempt = PaymentAttempt.Create(offlineOrder.Id, "Sandbox", $"REF-OFFLINE-SIMULATE_OFFLINE_UNSUPPORTED-{Guid.NewGuid():N}", testAmount, "VND", DateTime.UtcNow.AddMinutes(30), DateTime.UtcNow);
+            attempt.MarkSucceeded($"TX-OFF-{Guid.NewGuid():N}", DateTime.UtcNow);
+            db.PaymentAttempts.Add(attempt);
+
+            offlineRefund = Refund.Create(attempt.Id, factory.StaffId, Guid.NewGuid(), testAmount, "Offline refund test", DateTime.UtcNow);
+            offlineRefund.MarkNeedsAttention("Simulated offline timeout");
+            db.Refunds.Add(offlineRefund);
+
+            var cancellation = OrderCancellationRequest.Create(offlineOrder.Id, factory.CustomerId, "Cancel for refund", DateTime.UtcNow);
+            cancellation.Approve(factory.StaffId, "Approved", offlineRefund.Id, DateTime.UtcNow);
+            db.OrderCancellationRequests.Add(cancellation);
+
+            await db.SaveChangesAsync();
+        }
+
+        // Customer calling reconcile -> 403 Forbidden (Roles.Management requirement)
+        var customerReconcileRes = await customer.PostAsJsonAsync($"/api/v2/refunds/{offlineRefund.Id}/reconcile", new { note = "Customer attempt" });
+        Assert.Equal(HttpStatusCode.Forbidden, customerReconcileRes.StatusCode);
+
+        // Manager calling reconcile on offline gateway -> 403 Forbidden (Cannot perform manual financial confirmation)
+        var mgrOfflineRes = await manager.PostAsJsonAsync($"/api/v2/refunds/{offlineRefund.Id}/reconcile", new { note = "Manager manual attestation attempt" });
+        Assert.Equal(HttpStatusCode.Forbidden, mgrOfflineRes.StatusCode);
+
+        // Verify in DB: No financial side effects, no status change, no audit, no outbox
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var persistedRefund = await db.Refunds.AsNoTracking().SingleAsync(r => r.Id == offlineRefund.Id);
+            Assert.Equal(RefundStatus.NeedsAttention, persistedRefund.Status);
+            Assert.Null(persistedRefund.CompletedAtUtc);
+            Assert.Null(persistedRefund.ProviderReference);
+
+            var persistedOrder = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == offlineOrder.Id);
+            Assert.Equal("NeedsAttention", persistedOrder.OrderPaymentStatus);
+
+            var histories = await db.OrderStatusHistories.AsNoTracking()
+                .Where(h => h.OrderId == offlineOrder.Id && h.Reason.Contains("Manager manual attestation"))
+                .ToListAsync();
+            Assert.Empty(histories);
+
+            var audits = await db.AuditLogs.AsNoTracking()
+                .Where(a => a.AggregateId == offlineRefund.Id && a.Action == "ReconcileRefundSucceeded")
+                .ToListAsync();
+            Assert.Empty(audits);
+
+            var outboxes = await db.OutboxMessages.AsNoTracking()
+                .Where(m => m.AggregateId == offlineOrder.Id && m.EventType == "RefundReconciledSucceeded")
+                .ToListAsync();
+            Assert.Empty(outboxes);
+        }
+
+        // SCENARIO 2: Staff calling Reconcile on offline gateway -> 200 OK & Manual Confirmation Succeeded
+        var staffOfflineRes = await staff.PostAsJsonAsync($"/api/v2/refunds/{offlineRefund.Id}/reconcile", new { note = "Staff manual bank transfer confirmed" });
+        Assert.Equal(HttpStatusCode.OK, staffOfflineRes.StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var persistedRefund = await db.Refunds.AsNoTracking().SingleAsync(r => r.Id == offlineRefund.Id);
+            Assert.Equal(RefundStatus.Succeeded, persistedRefund.Status);
+            Assert.NotNull(persistedRefund.CompletedAtUtc);
+            Assert.NotNull(persistedRefund.ProviderReference);
+            Assert.StartsWith("MANUAL-REF-", persistedRefund.ProviderReference);
+
+            var persistedOrder = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == offlineOrder.Id);
+            Assert.Equal("Refunded", persistedOrder.OrderPaymentStatus);
+
+            var cancellation = await db.OrderCancellationRequests.AsNoTracking().SingleAsync(c => c.RefundId == offlineRefund.Id);
+            Assert.Equal(CancellationRequestStatus.Completed, cancellation.Status);
+
+            var history = await db.OrderStatusHistories.AsNoTracking()
+                .SingleOrDefaultAsync(h => h.OrderId == offlineOrder.Id && h.Axis == "Payment" && h.ToStatus == "Refunded");
+            Assert.NotNull(history);
+            Assert.Equal(factory.StaffId, history.ActorUserId);
+
+            var audit = await db.AuditLogs.AsNoTracking()
+                .SingleOrDefaultAsync(a => a.AggregateId == offlineRefund.Id && a.Action == "ReconcileRefundSucceeded");
+            Assert.NotNull(audit);
+
+            var outbox = await db.OutboxMessages.AsNoTracking()
+                .SingleOrDefaultAsync(m => m.AggregateId == offlineOrder.Id && m.EventType == "RefundReconciledSucceeded");
+            Assert.NotNull(outbox);
+        }
+
+        // SCENARIO 3: Admin calling Reconcile on offline gateway -> 200 OK & Manual Confirmation Succeeded
+        Order adminOfflineOrder;
+        Refund adminOfflineRefund;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            adminOfflineOrder = new Order
+            {
+                Id = Guid.NewGuid(),
+                OrderCode = $"TB-ADM-OFF-{Guid.NewGuid():N}",
+                UserId = factory.CustomerId,
+                QuoteId = null,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                Status = OrderStatus.Cancelled,
+                FulfillmentStatus = "Cancelled",
+                OrderPaymentStatus = "NeedsAttention",
+                Currency = "VND",
+                Quantity = 1,
+                UnitPriceSnapshot = testAmount,
+                PartnerCostSnapshot = 120000m,
+                SubTotalVnd = testAmount,
+                ShippingFeeRaw = 0,
+                FinalShippingFee = 0,
+                TotalAmount = testAmount,
+                ReceiverName = "Admin Offline Customer",
+                ReceiverPhone = "0901234567",
+                StreetAddress = "123 Le Loi",
+                District = "District 1",
+                City = "Ho Chi Minh",
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Orders.Add(adminOfflineOrder);
+
+            var attempt = PaymentAttempt.Create(adminOfflineOrder.Id, "Sandbox", $"REF-ADM-SIMULATE_OFFLINE_UNSUPPORTED-{Guid.NewGuid():N}", testAmount, "VND", DateTime.UtcNow.AddMinutes(30), DateTime.UtcNow);
+            attempt.MarkSucceeded($"TX-ADM-OFF-{Guid.NewGuid():N}", DateTime.UtcNow);
+            db.PaymentAttempts.Add(attempt);
+
+            adminOfflineRefund = Refund.Create(attempt.Id, factory.StaffId, Guid.NewGuid(), testAmount, "Admin offline refund test", DateTime.UtcNow);
+            adminOfflineRefund.MarkNeedsAttention("Simulated offline timeout");
+            db.Refunds.Add(adminOfflineRefund);
+
+            await db.SaveChangesAsync();
+        }
+
+        var adminOfflineRes = await admin.PostAsJsonAsync($"/api/v2/refunds/{adminOfflineRefund.Id}/reconcile", new { note = "Admin manual bank transfer confirmed" });
+        Assert.Equal(HttpStatusCode.OK, adminOfflineRes.StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var persistedRefund = await db.Refunds.AsNoTracking().SingleAsync(r => r.Id == adminOfflineRefund.Id);
+            Assert.Equal(RefundStatus.Succeeded, persistedRefund.Status);
+            Assert.StartsWith("MANUAL-REF-", persistedRefund.ProviderReference);
+
+            var persistedOrder = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == adminOfflineOrder.Id);
+            Assert.Equal("Refunded", persistedOrder.OrderPaymentStatus);
+        }
+
+        // SCENARIO 4: Manager calling Reconcile with verified gateway evidence (Succeeded) -> 200 OK
+        Order onlineOrder;
+        Refund onlineRefund;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            onlineOrder = new Order
+            {
+                Id = Guid.NewGuid(),
+                OrderCode = $"TB-ONL-{Guid.NewGuid():N}",
+                UserId = factory.CustomerId,
+                QuoteId = null,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                Status = OrderStatus.Cancelled,
+                FulfillmentStatus = "Cancelled",
+                OrderPaymentStatus = "NeedsAttention",
+                Currency = "VND",
+                Quantity = 1,
+                UnitPriceSnapshot = testAmount,
+                PartnerCostSnapshot = 120000m,
+                SubTotalVnd = testAmount,
+                ShippingFeeRaw = 0,
+                FinalShippingFee = 0,
+                TotalAmount = testAmount,
+                ReceiverName = "Online Customer",
+                ReceiverPhone = "0901234567",
+                StreetAddress = "123 Le Loi",
+                District = "District 1",
+                City = "Ho Chi Minh",
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Orders.Add(onlineOrder);
+
+            var attempt = PaymentAttempt.Create(onlineOrder.Id, "Sandbox", $"REF-ONLINE-{Guid.NewGuid():N}", testAmount, "VND", DateTime.UtcNow.AddMinutes(30), DateTime.UtcNow);
+            attempt.MarkSucceeded($"TX-ONL-{Guid.NewGuid():N}", DateTime.UtcNow);
+            db.PaymentAttempts.Add(attempt);
+
+            onlineRefund = Refund.Create(attempt.Id, factory.StaffId, Guid.NewGuid(), testAmount, "Online refund test", DateTime.UtcNow);
+            onlineRefund.MarkNeedsAttention("Simulated online timeout");
+            db.Refunds.Add(onlineRefund);
+
+            await db.SaveChangesAsync();
+        }
+
+        var mgrOnlineRes = await manager.PostAsJsonAsync($"/api/v2/refunds/{onlineRefund.Id}/reconcile", new { note = "Manager verified gateway evidence reconcile" });
+        Assert.Equal(HttpStatusCode.OK, mgrOnlineRes.StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var persistedRefund = await db.Refunds.AsNoTracking().SingleAsync(r => r.Id == onlineRefund.Id);
+            Assert.Equal(RefundStatus.Succeeded, persistedRefund.Status);
+            Assert.StartsWith("SANDBOX-REF-", persistedRefund.ProviderReference);
+
+            var persistedOrder = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == onlineOrder.Id);
+            Assert.Equal("Refunded", persistedOrder.OrderPaymentStatus);
+        }
+
+        // SCENARIO 5: Manager calling Reconcile with verified gateway evidence (Failed) -> 200 OK & status marked Failed
+        Order failOrder;
+        Refund failRefund;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            failOrder = new Order
+            {
+                Id = Guid.NewGuid(),
+                OrderCode = $"TB-FAIL-{Guid.NewGuid():N}",
+                UserId = factory.CustomerId,
+                QuoteId = null,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                Status = OrderStatus.Cancelled,
+                FulfillmentStatus = "Cancelled",
+                OrderPaymentStatus = "NeedsAttention",
+                Currency = "VND",
+                Quantity = 1,
+                UnitPriceSnapshot = testAmount,
+                PartnerCostSnapshot = 120000m,
+                SubTotalVnd = testAmount,
+                ShippingFeeRaw = 0,
+                FinalShippingFee = 0,
+                TotalAmount = testAmount,
+                ReceiverName = "Fail Customer",
+                ReceiverPhone = "0901234567",
+                StreetAddress = "123 Le Loi",
+                District = "District 1",
+                City = "Ho Chi Minh",
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Orders.Add(failOrder);
+
+            var attempt = PaymentAttempt.Create(failOrder.Id, "Sandbox", $"REF-FAIL-SIMULATE_REFUND_FAIL-{Guid.NewGuid():N}", testAmount, "VND", DateTime.UtcNow.AddMinutes(30), DateTime.UtcNow);
+            attempt.MarkSucceeded($"TX-FAIL-{Guid.NewGuid():N}", DateTime.UtcNow);
+            db.PaymentAttempts.Add(attempt);
+
+            failRefund = Refund.Create(attempt.Id, factory.StaffId, Guid.NewGuid(), testAmount, "Fail refund test", DateTime.UtcNow);
+            failRefund.MarkNeedsAttention("Simulated failure timeout");
+            db.Refunds.Add(failRefund);
+
+            await db.SaveChangesAsync();
+        }
+
+        var mgrFailRes = await manager.PostAsJsonAsync($"/api/v2/refunds/{failRefund.Id}/reconcile", new { note = "Manager verified gateway failure reconcile" });
+        Assert.Equal(HttpStatusCode.OK, mgrFailRes.StatusCode);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var persistedRefund = await db.Refunds.AsNoTracking().SingleAsync(r => r.Id == failRefund.Id);
+            Assert.Equal(RefundStatus.Failed, persistedRefund.Status);
+
+            var persistedOrder = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == failOrder.Id);
+            Assert.Equal("RefundPending", persistedOrder.OrderPaymentStatus);
+        }
+    }
+
+
     private async Task<Guid> NewCustomer(int credits = 10)
     {
         using var scope = factory.Services.CreateScope();

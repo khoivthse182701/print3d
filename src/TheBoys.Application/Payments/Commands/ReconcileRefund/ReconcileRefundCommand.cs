@@ -13,7 +13,8 @@ namespace TheBoys.Application.Payments.Commands.ReconcileRefund;
 public sealed record ReconcileRefundCommand(
     Guid RefundId,
     Guid ReconciledByUserId,
-    string? Note
+    string? Note,
+    bool CanConfirmManualRefund = false
 ) : IRequest<Result<RefundDto>>;
 
 public sealed class ReconcileRefundCommandHandler(
@@ -57,10 +58,27 @@ public sealed class ReconcileRefundCommandHandler(
 
         var queryResult = await gateway.QueryRefundAsync(attempt.MerchantReference, refund.OperationKey, ct);
 
-        if (queryResult.Success && string.Equals(queryResult.Status, "Succeeded", StringComparison.OrdinalIgnoreCase))
+        // Với cổng thanh toán thủ công/chuyển khoản VietQR (như PayOS/SePay không có API rút tiền tự động),
+        // thao tác bấm 'Xác nhận Đối Soát' của Staff/Admin chính là sự xác nhận đã chuyển khoản hoàn tiền thủ công thành công.
+        var isOfflineManualGateway = string.Equals(queryResult.RawStatus, "OFFLINE_QUERY_UNSUPPORTED", StringComparison.OrdinalIgnoreCase);
+
+        // MGR-F08: Quản lý (Manager) chỉ có quyền đối soát theo bằng chứng xác thực từ cổng thanh toán (verified gateway evidence).
+        // Xác nhận hoàn tiền thủ công khi cổng không hỗ trợ tra cứu là năng lực tài chính riêng biệt của Staff/Admin.
+        if (isOfflineManualGateway && !command.CanConfirmManualRefund)
+        {
+            return Result<RefundDto>.Failure(Error.Unauthorized(
+                "Forbidden",
+                "Quản lý (Manager) chỉ có quyền đối soát tự động theo dữ liệu cổng thanh toán. Xác nhận hoàn tiền thủ công đối với cổng offline yêu cầu quyền Staff hoặc Admin."
+            ));
+        }
+
+        var isConfirmedSucceeded = (queryResult.Success && string.Equals(queryResult.Status, "Succeeded", StringComparison.OrdinalIgnoreCase))
+            || isOfflineManualGateway;
+
+        if (isConfirmedSucceeded)
         {
             refund.MarkSucceeded(
-                queryResult.ProviderReference ?? $"RECONCILED-REF-{refund.OperationKey:N}",
+                queryResult.ProviderReference ?? $"MANUAL-REF-{now:yyyyMMdd}-{refund.OperationKey.ToString("N")[..8].ToUpperInvariant()}",
                 queryResult.CompletedAtUtc ?? now,
                 command.ReconciledByUserId
             );

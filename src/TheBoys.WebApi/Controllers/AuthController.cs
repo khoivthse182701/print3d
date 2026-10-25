@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using Google.Apis.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -13,6 +14,27 @@ using TheBoys.Domain.Enums;
 using TheBoys.WebApi.Security;
 
 namespace TheBoys.WebApi.Controllers;
+
+public sealed class GoogleLoginRequest
+{
+    public string? IdToken { get; set; }
+    public string? AccessToken { get; set; }
+}
+
+public sealed class GoogleUserInfoPayload
+{
+    [System.Text.Json.Serialization.JsonPropertyName("email")]
+    public string? Email { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("given_name")]
+    public string? GivenName { get; set; }
+
+    [System.Text.Json.Serialization.JsonPropertyName("email_verified")]
+    public bool? EmailVerified { get; set; }
+}
 
 public sealed class RegisterRequest
 {
@@ -69,7 +91,8 @@ public sealed class AuthController(
     IConsentService consentService,
     IAuditService auditService,
     IClock clock,
-    IHostEnvironment environment) : ApiControllerBase
+    IHostEnvironment environment,
+    IConfiguration config) : ApiControllerBase
 {
     [HttpPost("register"), AllowAnonymous, EnableRateLimiting("auth")]
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken ct)
@@ -244,6 +267,179 @@ public sealed class AuthController(
         }
 
         // Create refresh session with hashed token and family
+        var (rawRefreshToken, refreshTokenHash) = TokenService.GenerateSecureToken();
+        var familyId = Guid.NewGuid();
+        var expiresAtUtc = clock.UtcNow.AddDays(7);
+
+        var session = RefreshSession.Create(
+            user.Id,
+            familyId,
+            refreshTokenHash,
+            expiresAtUtc,
+            clock.UtcNow);
+
+        db.RefreshSessions.Add(session);
+        await db.SaveChangesAsync(ct);
+
+        var (accessToken, accessExpires) = tokens.CreateAccessToken(user, session.Id);
+
+        SetRefreshTokenCookie(rawRefreshToken, expiresAtUtc);
+
+        return Ok(tokens.CreateResponse(user, accessToken, accessExpires, rawRefreshToken));
+    }
+
+    [HttpPost("google-login"), AllowAnonymous, EnableRateLimiting("auth")]
+    public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.IdToken) && string.IsNullOrWhiteSpace(request.AccessToken))
+            return BadRequest(new { message = "Google Token không được để trống." });
+
+        string email;
+        string fullName;
+
+        if (!string.IsNullOrWhiteSpace(request.AccessToken))
+        {
+            try
+            {
+                using var httpClient = new HttpClient();
+                httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", request.AccessToken);
+                var response = await httpClient.GetAsync("https://www.googleapis.com/oauth2/v3/userinfo", ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return Unauthorized(new { message = "Google Access Token không hợp lệ hoặc đã hết hạn." });
+                }
+
+                var userInfo = await response.Content.ReadFromJsonAsync<GoogleUserInfoPayload>(ct);
+                if (userInfo == null || string.IsNullOrWhiteSpace(userInfo.Email))
+                {
+                    return Unauthorized(new { message = "Không tìm thấy thông tin email trong tài khoản Google." });
+                }
+
+                email = userInfo.Email.Trim().ToLowerInvariant();
+                fullName = string.IsNullOrWhiteSpace(userInfo.Name)
+                    ? (userInfo.GivenName ?? email.Split('@')[0])
+                    : userInfo.Name.Trim();
+            }
+            catch (Exception ex)
+            {
+                return Unauthorized(new { message = $"Xác thực Google Access Token thất bại: {ex.Message}" });
+            }
+        }
+        else
+        {
+            var googleClientId = config["GoogleAuthSettings:ClientId"]
+                ?? "928800899912-81ire3k9j09sibcegq1hriqgg231ahqr.apps.googleusercontent.com";
+
+            GoogleJsonWebSignature.Payload payload;
+            try
+            {
+                var validationSettings = new GoogleJsonWebSignature.ValidationSettings
+                {
+                    Audience = new[] { googleClientId }
+                };
+                payload = await GoogleJsonWebSignature.ValidateAsync(request.IdToken, validationSettings);
+            }
+            catch (InvalidJwtException ex)
+            {
+                return Unauthorized(new { message = $"Google ID Token không hợp lệ hoặc đã hết hạn: {ex.Message}" });
+            }
+            catch (Exception ex)
+            {
+                return Unauthorized(new { message = $"Xác thực Google ID Token thất bại: {ex.Message}" });
+            }
+
+            if (payload == null || string.IsNullOrWhiteSpace(payload.Email))
+            {
+                return Unauthorized(new { message = "Không tìm thấy thông tin email trong Google ID Token." });
+            }
+
+            email = payload.Email.Trim().ToLowerInvariant();
+            fullName = string.IsNullOrWhiteSpace(payload.Name)
+                ? (payload.GivenName ?? email.Split('@')[0])
+                : payload.Name.Trim();
+        }
+
+        var normalizedEmail = email.ToUpperInvariant();
+
+        var user = await db.Users
+            .Include(u => u.CreditAccount)
+            .SingleOrDefaultAsync(x => x.NormalizedEmail == normalizedEmail, ct);
+
+        if (user == null)
+        {
+            user = new User
+            {
+                Email = email,
+                NormalizedEmail = normalizedEmail,
+                FullName = fullName,
+                Role = UserRole.Customer,
+                AccountStatus = AccountStatus.Active,
+                EmailVerifiedAtUtc = clock.UtcNow
+            };
+            user.PasswordHash = hasher.HashPassword(user, Guid.NewGuid().ToString("N"));
+
+            var creditAccount = CreditAccount.Create(user.Id, trialBalance: 2, purchasedBalance: 0);
+            user.CreditAccount = creditAccount;
+
+            var ledgerEntry = CreditLedgerEntry.CreateTrialGrant(
+                user.Id,
+                2,
+                $"register:google:{user.Id}",
+                null,
+                "Khởi tạo tài khoản Google dùng thử 2 lượt tạo 3D",
+                clock.UtcNow);
+
+            await using var tx = await db.BeginTransactionAsync(ct);
+            db.Users.Add(user);
+            db.CreditAccounts.Add(creditAccount);
+            db.CreditLedger.Add(ledgerEntry);
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+
+            await auditService.RecordAsync(
+                user.Id,
+                "Auth.GoogleRegister",
+                "User",
+                user.Id,
+                Guid.NewGuid().ToString("N"),
+                new { user.Email, user.FullName },
+                "Đăng ký tài khoản mới tự động qua Google Login",
+                ct);
+        }
+        else
+        {
+            if (user.IsLockedOut(clock.UtcNow))
+                return StatusCode(StatusCodes.Status423Locked, new { message = "Tài khoản tạm thời bị khóa. Vui lòng liên hệ quản trị viên." });
+
+            if (user.AccountStatus == AccountStatus.Locked || user.AccountStatus == AccountStatus.Anonymized || Roles.Name(user.Role) == "disabled")
+                return StatusCode(StatusCodes.Status403Forbidden, new { message = "Tài khoản không khả dụng." });
+
+            if (user.AccountStatus == AccountStatus.Unverified)
+            {
+                user.VerifyEmail(clock.UtcNow);
+            }
+
+            if (user.CreditAccount == null)
+            {
+                var creditAccount = CreditAccount.Create(user.Id, trialBalance: 2, purchasedBalance: 0);
+                user.CreditAccount = creditAccount;
+                db.CreditAccounts.Add(creditAccount);
+            }
+
+            user.ResetFailedLogins();
+            await db.SaveChangesAsync(ct);
+
+            await auditService.RecordAsync(
+                user.Id,
+                "Auth.GoogleLogin",
+                "User",
+                user.Id,
+                Guid.NewGuid().ToString("N"),
+                new { user.Email },
+                "Đăng nhập thành công qua Google",
+                ct);
+        }
+
         var (rawRefreshToken, refreshTokenHash) = TokenService.GenerateSecureToken();
         var familyId = Guid.NewGuid();
         var expiresAtUtc = clock.UtcNow.AddDays(7);

@@ -26,7 +26,10 @@ public sealed class RefundsController(ISender mediator) : ApiControllerBase
         [FromBody] ReconcileRefundRequest? request,
         CancellationToken ct)
     {
-        var command = new ReconcileRefundCommand(refundId, UserId, request?.Note);
+        var isManager = User.IsInRole(Roles.Manager);
+        var canConfirmManualRefund = (User.IsInRole(Roles.Staff) || User.IsInRole(Roles.Admin)) && !isManager;
+
+        var command = new ReconcileRefundCommand(refundId, UserId, request?.Note, canConfirmManualRefund);
         var result = await mediator.Send(command, ct);
 
         if (result.IsFailure)
