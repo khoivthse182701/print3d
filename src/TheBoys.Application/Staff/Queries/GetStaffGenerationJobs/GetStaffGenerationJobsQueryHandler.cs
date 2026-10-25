@@ -40,8 +40,16 @@ public sealed class GetStaffGenerationJobsQueryHandler(IApplicationDbContext db)
 
         if (request.MinAgeMinutes.HasValue)
         {
-            var cutoff = request.CapturedUtcNow.AddMinutes(-request.MinAgeMinutes.Value);
-            query = query.Where(x => x.CreatedAtUtc <= cutoff);
+            var maxMinutes = (request.CapturedUtcNow - DateTime.MinValue).TotalMinutes;
+            if (request.MinAgeMinutes.Value >= maxMinutes)
+            {
+                query = query.Where(x => false);
+            }
+            else
+            {
+                var cutoff = request.CapturedUtcNow.AddMinutes(-request.MinAgeMinutes.Value);
+                query = query.Where(x => x.CreatedAtUtc <= cutoff);
+            }
         }
 
         var totalCount = await query.CountAsync(ct);
@@ -81,8 +89,8 @@ public sealed class GetStaffGenerationJobsQueryHandler(IApplicationDbContext db)
             x.Stage,
             x.Progress,
             x.ReviewStatus,
-            x.CreatedAtUtc,
-            x.CompletedAtUtc,
+            DateTime.SpecifyKind(x.CreatedAtUtc, DateTimeKind.Utc),
+            x.CompletedAtUtc.HasValue ? DateTime.SpecifyKind(x.CompletedAtUtc.Value, DateTimeKind.Utc) : null,
             Math.Max(0, (long)Math.Floor((request.CapturedUtcNow - x.CreatedAtUtc).TotalMinutes))
         )).ToList();
 

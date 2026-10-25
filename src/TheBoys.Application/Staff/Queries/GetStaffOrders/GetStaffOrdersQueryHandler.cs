@@ -35,8 +35,16 @@ public sealed class GetStaffOrdersQueryHandler(IApplicationDbContext db)
 
         if (request.MinAgeMinutes.HasValue)
         {
-            var cutoff = request.CapturedUtcNow.AddMinutes(-request.MinAgeMinutes.Value);
-            query = query.Where(x => x.CreatedAtUtc <= cutoff);
+            var maxMinutes = (request.CapturedUtcNow - DateTime.MinValue).TotalMinutes;
+            if (request.MinAgeMinutes.Value >= maxMinutes)
+            {
+                query = query.Where(x => false);
+            }
+            else
+            {
+                var cutoff = request.CapturedUtcNow.AddMinutes(-request.MinAgeMinutes.Value);
+                query = query.Where(x => x.CreatedAtUtc <= cutoff);
+            }
         }
 
         var totalCount = await query.CountAsync(ct);
@@ -78,17 +86,19 @@ public sealed class GetStaffOrdersQueryHandler(IApplicationDbContext db)
             x.GenerationTaskId,
             x.Status,
             x.Quantity,
-            x.CreatedAtUtc,
+            DateTime.SpecifyKind(x.CreatedAtUtc, DateTimeKind.Utc),
             Math.Max(0, (long)Math.Floor((request.CapturedUtcNow - x.CreatedAtUtc).TotalMinutes)),
-            x.PaidAtUtc,
-            x.SentToPartnerAtUtc,
-            x.PrintingStartedAtUtc,
-            x.PackagedAtUtc,
-            x.ShippedAtUtc,
-            x.DeliveredAtUtc,
-            x.CancelledAtUtc
+            AsUtc(x.PaidAtUtc),
+            AsUtc(x.SentToPartnerAtUtc),
+            AsUtc(x.PrintingStartedAtUtc),
+            AsUtc(x.PackagedAtUtc),
+            AsUtc(x.ShippedAtUtc),
+            AsUtc(x.DeliveredAtUtc),
+            AsUtc(x.CancelledAtUtc)
         )).ToList();
 
         return new StaffPagedResult<StaffOrderItem>(items, request.Page, request.PageSize, totalCount);
     }
+
+    private static DateTime? AsUtc(DateTime? dt) => dt.HasValue ? DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc) : null;
 }

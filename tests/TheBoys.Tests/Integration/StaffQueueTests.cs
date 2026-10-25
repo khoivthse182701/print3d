@@ -482,6 +482,377 @@ public class StaffQueueTests(DemoFactory factory) : IClassFixture<DemoFactory>
             "/api/v2/staff/generation-jobs?createdFromUtc=2026-10-25T10:00:00Z&createdToUtc=2026-10-25T10:00:00Z"));
     }
 
+    [Fact]
+    public async Task F001_MinAgeMinutes_LargeIntegerAndZero_DoesNotThrow500()
+    {
+        using var staff = await factory.Client(factory.StaffId);
+
+        // 1. Extreme integer int.MaxValue (2147483647) must return 200 OK with empty items, not 500
+        var jobMaxAgeRes = await staff.GetAsync("/api/v2/staff/generation-jobs?minAgeMinutes=2147483647");
+        Assert.Equal(HttpStatusCode.OK, jobMaxAgeRes.StatusCode);
+        var jobMaxAge = await Json(jobMaxAgeRes);
+        Assert.Equal(0, jobMaxAge.GetProperty("items").GetArrayLength());
+        Assert.Equal(0, jobMaxAge.GetProperty("totalCount").GetInt32());
+
+        var orderMaxAgeRes = await staff.GetAsync("/api/v2/staff/orders?minAgeMinutes=2147483647");
+        Assert.Equal(HttpStatusCode.OK, orderMaxAgeRes.StatusCode);
+        var orderMaxAge = await Json(orderMaxAgeRes);
+        Assert.Equal(0, orderMaxAge.GetProperty("items").GetArrayLength());
+        Assert.Equal(0, orderMaxAge.GetProperty("totalCount").GetInt32());
+
+        // 2. Zero minAgeMinutes (minAgeMinutes=0) returns items created up to now
+        var tag = "Age0_" + Guid.NewGuid().ToString("N")[..8];
+        var zeroJobId = Guid.NewGuid();
+        var zeroTaskId = Guid.NewGuid();
+        var zeroOrderId = Guid.NewGuid();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.GenerationTasks.Add(new GenerationTask
+            {
+                Id = zeroJobId,
+                UserId = factory.CustomerId,
+                ModelName = $"ZeroJob_{tag}",
+                Provider = tag,
+                CreatedAtUtc = DateTime.UtcNow.AddMinutes(-5)
+            });
+
+            db.GenerationTasks.Add(new GenerationTask
+            {
+                Id = zeroTaskId,
+                UserId = factory.CustomerId,
+                ModelName = $"TaskForZeroOrder_{tag}",
+                Provider = "Meshy",
+                Status = GenerationStatus.Succeeded
+            });
+
+            db.Orders.Add(new Order
+            {
+                Id = zeroOrderId,
+                OrderCode = $"TB-ORD-{tag}",
+                UserId = factory.CustomerId,
+                GenerationTaskId = zeroTaskId,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                ReceiverName = "Zero Receiver",
+                ReceiverPhone = "0900000000",
+                StreetAddress = "Zero St",
+                District = "Zero Dist",
+                CreatedAtUtc = DateTime.UtcNow.AddMinutes(-5)
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var jobZeroRes = await staff.GetAsync($"/api/v2/staff/generation-jobs?provider={tag}&minAgeMinutes=0");
+        Assert.Equal(HttpStatusCode.OK, jobZeroRes.StatusCode);
+        var jobZero = await Json(jobZeroRes);
+        Assert.Single(jobZero.GetProperty("items").EnumerateArray());
+
+        var orderZeroRes = await staff.GetAsync($"/api/v2/staff/orders?orderCode=TB-ORD-{tag}&minAgeMinutes=0");
+        Assert.Equal(HttpStatusCode.OK, orderZeroRes.StatusCode);
+        var orderZero = await Json(orderZeroRes);
+        Assert.Single(orderZero.GetProperty("items").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task F002_Timestamps_PreserveUtcKind_AndSerializeWithZ()
+    {
+        var tag = "UtcZ_" + Guid.NewGuid().ToString("N")[..8];
+        var jobId = Guid.NewGuid();
+        var taskId = Guid.NewGuid();
+        var orderId = Guid.NewGuid();
+
+        var jobCreatedInstant = new DateTime(2026, 10, 25, 10, 30, 0, DateTimeKind.Utc);
+        var jobCompletedInstant = new DateTime(2026, 10, 25, 10, 45, 0, DateTimeKind.Utc);
+        var orderPrintingStartedInstant = new DateTime(2026, 10, 25, 11, 0, 0, DateTimeKind.Utc);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.GenerationTasks.Add(new GenerationTask
+            {
+                Id = jobId,
+                UserId = factory.CustomerId,
+                ModelName = $"JobUtc_{tag}",
+                Provider = tag,
+                CreatedAtUtc = jobCreatedInstant,
+                CompletedAtUtc = jobCompletedInstant
+            });
+
+            db.GenerationTasks.Add(new GenerationTask
+            {
+                Id = taskId,
+                UserId = factory.CustomerId,
+                ModelName = $"TaskForOrderUtc_{tag}",
+                Provider = "Meshy",
+                Status = GenerationStatus.Succeeded
+            });
+
+            db.Orders.Add(new Order
+            {
+                Id = orderId,
+                OrderCode = $"TB-ORD-UTC-{tag}",
+                UserId = factory.CustomerId,
+                GenerationTaskId = taskId,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                ReceiverName = "Utc Receiver",
+                ReceiverPhone = "0900000000",
+                StreetAddress = "Utc St",
+                District = "Utc Dist",
+                CreatedAtUtc = jobCreatedInstant,
+                PrintingStartedAtUtc = orderPrintingStartedInstant
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        using var staff = await factory.Client(factory.StaffId);
+
+        // 1. Generation jobs: assert every timestamp in JSON ends with 'Z'
+        var jobRes = await staff.GetAsync($"/api/v2/staff/generation-jobs?provider={tag}");
+        Assert.Equal(HttpStatusCode.OK, jobRes.StatusCode);
+        var jobRawJson = await jobRes.Content.ReadAsStringAsync();
+
+        var jobDoc = JsonDocument.Parse(jobRawJson).RootElement;
+        var jobItem = jobDoc.GetProperty("items").EnumerateArray().Single();
+        var createdAtUtcStr = jobItem.GetProperty("createdAtUtc").GetString();
+        var completedAtUtcStr = jobItem.GetProperty("completedAtUtc").GetString();
+
+        Assert.NotNull(createdAtUtcStr);
+        Assert.EndsWith("Z", createdAtUtcStr);
+        Assert.NotNull(completedAtUtcStr);
+        Assert.EndsWith("Z", completedAtUtcStr);
+
+        // Verify DateTimeOffset parse reproduces the exact UTC instant
+        Assert.Equal(jobCreatedInstant, DateTimeOffset.Parse(createdAtUtcStr).UtcDateTime);
+        Assert.Equal(jobCompletedInstant, DateTimeOffset.Parse(completedAtUtcStr).UtcDateTime);
+
+        // 2. Orders: assert timestamps in JSON end with 'Z'
+        var orderRes = await staff.GetAsync($"/api/v2/staff/orders?orderCode=TB-ORD-UTC-{tag}");
+        Assert.Equal(HttpStatusCode.OK, orderRes.StatusCode);
+        var orderRawJson = await orderRes.Content.ReadAsStringAsync();
+
+        var orderDoc = JsonDocument.Parse(orderRawJson).RootElement;
+        var orderItem = orderDoc.GetProperty("items").EnumerateArray().Single();
+        var orderCreatedAtUtcStr = orderItem.GetProperty("createdAtUtc").GetString();
+        var orderPrintingStartedAtUtcStr = orderItem.GetProperty("printingStartedAtUtc").GetString();
+
+        Assert.NotNull(orderCreatedAtUtcStr);
+        Assert.EndsWith("Z", orderCreatedAtUtcStr);
+        Assert.NotNull(orderPrintingStartedAtUtcStr);
+        Assert.EndsWith("Z", orderPrintingStartedAtUtcStr);
+        Assert.Equal(orderPrintingStartedInstant, DateTimeOffset.Parse(orderPrintingStartedAtUtcStr).UtcDateTime);
+
+        // 3. Test non-UTC input offset normalization: +07:00
+        // 17:00:00+07:00 is 10:00:00Z; 18:00:00+07:00 is 11:00:00Z. Job created at 10:30:00Z must be matched.
+        var fromOffsetStr = Uri.EscapeDataString("2026-10-25T17:00:00+07:00");
+        var toOffsetStr = Uri.EscapeDataString("2026-10-25T18:00:00+07:00");
+        var filterOffsetRes = await Json(await staff.GetAsync(
+            $"/api/v2/staff/generation-jobs?provider={tag}&createdFromUtc={fromOffsetStr}&createdToUtc={toOffsetStr}"));
+        Assert.Single(filterOffsetRes.GetProperty("items").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task F003_NonFlagsEnum_CompositeValues_Return400ProblemDetailsWithTraceId()
+    {
+        using var staff = await factory.Client(factory.StaffId);
+
+        static async Task AssertProblemDetails400(HttpResponseMessage response)
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            var body = await response.Content.ReadAsStringAsync();
+            var doc = JsonDocument.Parse(body).RootElement;
+            Assert.Equal(400, doc.GetProperty("status").GetInt32());
+            Assert.True(doc.TryGetProperty("traceId", out var traceIdProp));
+            Assert.False(string.IsNullOrWhiteSpace(traceIdProp.GetString()));
+            Assert.True(doc.TryGetProperty("detail", out var detailProp));
+            Assert.False(string.IsNullOrWhiteSpace(detailProp.GetString()));
+        }
+
+        // 1. Composite GenerationStatus: queued,processing must 400
+        await AssertProblemDetails400(await staff.GetAsync("/api/v2/staff/generation-jobs?status=queued,processing"));
+        await AssertProblemDetails400(await staff.GetAsync("/api/v2/staff/generation-jobs?status=queued%2Cprocessing"));
+
+        // 2. Composite PrintReviewStatus: pending,approved must 400
+        await AssertProblemDetails400(await staff.GetAsync("/api/v2/staff/generation-jobs?reviewStatus=pending,approved"));
+        await AssertProblemDetails400(await staff.GetAsync("/api/v2/staff/generation-jobs?reviewStatus=pending%2Capproved"));
+
+        // 3. Composite OrderStatus: draft,printing must 400
+        await AssertProblemDetails400(await staff.GetAsync("/api/v2/staff/orders?status=draft,printing"));
+        await AssertProblemDetails400(await staff.GetAsync("/api/v2/staff/orders?status=draft%2Cprinting"));
+    }
+
+    [Fact]
+    public async Task AC07_ExactInclusiveAndExclusiveDateBoundaries()
+    {
+        var tag = "Bound_" + Guid.NewGuid().ToString("N")[..8];
+        var id1 = Guid.NewGuid();
+        var id2 = Guid.NewGuid();
+        var id3 = Guid.NewGuid();
+
+        var t1 = new DateTime(2026, 10, 25, 10, 0, 0, DateTimeKind.Utc);
+        var t2 = new DateTime(2026, 10, 25, 10, 30, 0, DateTimeKind.Utc);
+        var t3 = new DateTime(2026, 10, 25, 11, 0, 0, DateTimeKind.Utc);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.GenerationTasks.AddRange(
+                new GenerationTask { Id = id1, UserId = factory.CustomerId, ModelName = $"T1_{tag}", Provider = tag, CreatedAtUtc = t1 },
+                new GenerationTask { Id = id2, UserId = factory.CustomerId, ModelName = $"T2_{tag}", Provider = tag, CreatedAtUtc = t2 },
+                new GenerationTask { Id = id3, UserId = factory.CustomerId, ModelName = $"T3_{tag}", Provider = tag, CreatedAtUtc = t3 }
+            );
+            await db.SaveChangesAsync();
+        }
+
+        using var staff = await factory.Client(factory.StaffId);
+
+        // createdFromUtc = t1 (inclusive), createdToUtc = t3 (exclusive)
+        var fromStr = Uri.EscapeDataString("2026-10-25T10:00:00Z");
+        var toStr = Uri.EscapeDataString("2026-10-25T11:00:00Z");
+
+        var res = await Json(await staff.GetAsync(
+            $"/api/v2/staff/generation-jobs?provider={tag}&createdFromUtc={fromStr}&createdToUtc={toStr}"));
+
+        var returnedIds = res.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).ToList();
+
+        // Exact inclusive lower bound: t1 must be INCLUDED
+        Assert.Contains(id1, returnedIds);
+        // Middle: t2 must be INCLUDED
+        Assert.Contains(id2, returnedIds);
+        // Exact exclusive upper bound: t3 must be EXCLUDED
+        Assert.DoesNotContain(id3, returnedIds);
+        Assert.Equal(2, res.GetProperty("totalCount").GetInt32());
+    }
+
+    [Fact]
+    public async Task AC07_Orders_CombinedFilters_Date_Age_Paging_Count_DeterministicTieBreaker()
+    {
+        var tag = "OrdComb_" + Guid.NewGuid().ToString("N")[..8];
+        var taskId = Guid.NewGuid();
+
+        var idA = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var idB = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var idC = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        var idD = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+
+        var baseTime = new DateTime(2025, 6, 1, 12, 0, 0, DateTimeKind.Utc);
+        var t1 = baseTime.AddMinutes(-50);
+        var t2 = baseTime.AddMinutes(-30);
+        var t3 = baseTime.AddMinutes(-10);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            db.GenerationTasks.Add(new GenerationTask
+            {
+                Id = taskId,
+                UserId = factory.CustomerId,
+                ModelName = $"TaskForOrders_{tag}",
+                Provider = "Meshy",
+                Status = GenerationStatus.Succeeded
+            });
+
+            db.Orders.AddRange(
+                // idA and idB have identical CreatedAtUtc (t1), Draft -> will test tie-breaker
+                new Order
+                {
+                    Id = idA,
+                    OrderCode = $"TB-ORD-{tag}-A",
+                    UserId = factory.CustomerId,
+                    GenerationTaskId = taskId,
+                    PricingPackageId = DatabaseInitializer.DemoPackageId,
+                    Status = OrderStatus.Draft,
+                    ReceiverName = "R A",
+                    ReceiverPhone = "0900000000",
+                    StreetAddress = "A St",
+                    District = "A Dist",
+                    CreatedAtUtc = t1
+                },
+                new Order
+                {
+                    Id = idB,
+                    OrderCode = $"TB-ORD-{tag}-B",
+                    UserId = factory.CustomerId,
+                    GenerationTaskId = taskId,
+                    PricingPackageId = DatabaseInitializer.DemoPackageId,
+                    Status = OrderStatus.Draft,
+                    ReceiverName = "R B",
+                    ReceiverPhone = "0900000000",
+                    StreetAddress = "B St",
+                    District = "B Dist",
+                    CreatedAtUtc = t1
+                },
+                // idC has CreatedAtUtc (t2), Draft
+                new Order
+                {
+                    Id = idC,
+                    OrderCode = $"TB-ORD-{tag}-C",
+                    UserId = factory.CustomerId,
+                    GenerationTaskId = taskId,
+                    PricingPackageId = DatabaseInitializer.DemoPackageId,
+                    Status = OrderStatus.Draft,
+                    ReceiverName = "R C",
+                    ReceiverPhone = "0900000000",
+                    StreetAddress = "C St",
+                    District = "C Dist",
+                    CreatedAtUtc = t2
+                },
+                // idD has CreatedAtUtc (t3), Printing (different status)
+                new Order
+                {
+                    Id = idD,
+                    OrderCode = $"TB-ORD-{tag}-D",
+                    UserId = factory.CustomerId,
+                    GenerationTaskId = taskId,
+                    PricingPackageId = DatabaseInitializer.DemoPackageId,
+                    Status = OrderStatus.Printing,
+                    ReceiverName = "R D",
+                    ReceiverPhone = "0900000000",
+                    StreetAddress = "D St",
+                    District = "D Dist",
+                    CreatedAtUtc = t3
+                }
+            );
+            await db.SaveChangesAsync();
+        }
+
+        using var staff = await factory.Client(factory.StaffId);
+
+        // Combined filter on orders: status=draft, createdFromUtc, createdToUtc, minAgeMinutes=20
+        // t1 (-50m) and t2 (-30m) match status=draft and age >= 20m.
+        // t3 (-10m) does NOT match (age < 20m and status=printing).
+        var fromStr = Uri.EscapeDataString(baseTime.AddMinutes(-60).ToString("yyyy-MM-ddTHH:mm:ssZ"));
+        var toStr = Uri.EscapeDataString(baseTime.AddMinutes(-20).ToString("yyyy-MM-ddTHH:mm:ssZ"));
+
+        // 1. Sort oldest with paging: page 1 size 2 -> items [idA, idB], totalCount = 3 (idA, idB, idC)
+        var oldestPage1 = await Json(await staff.GetAsync(
+            $"/api/v2/staff/orders?status=draft&createdFromUtc={fromStr}&createdToUtc={toStr}&minAgeMinutes=20&sort=oldest&page=1&pageSize=2"));
+
+        Assert.Equal(3, oldestPage1.GetProperty("totalCount").GetInt32());
+        var oldestP1Ids = oldestPage1.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).ToList();
+        // Tie-breaker ASC: idA < idB
+        Assert.Equal(new[] { idA, idB }, oldestP1Ids);
+
+        // 2. Sort oldest page 2 size 2 -> items [idC]
+        var oldestPage2 = await Json(await staff.GetAsync(
+            $"/api/v2/staff/orders?status=draft&createdFromUtc={fromStr}&createdToUtc={toStr}&minAgeMinutes=20&sort=oldest&page=2&pageSize=2"));
+        var oldestP2Ids = oldestPage2.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).ToList();
+        Assert.Equal(new[] { idC }, oldestP2Ids);
+
+        // 3. Sort newest with paging: idC (-30m) first, then tie-breaker DESC on t1 (-50m): idB > idA
+        var newestPage1 = await Json(await staff.GetAsync(
+            $"/api/v2/staff/orders?status=draft&createdFromUtc={fromStr}&createdToUtc={toStr}&minAgeMinutes=20&sort=newest&page=1&pageSize=2"));
+        var newestP1Ids = newestPage1.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).ToList();
+        Assert.Equal(new[] { idC, idB }, newestP1Ids);
+
+        var newestPage2 = await Json(await staff.GetAsync(
+            $"/api/v2/staff/orders?status=draft&createdFromUtc={fromStr}&createdToUtc={toStr}&minAgeMinutes=20&sort=newest&page=2&pageSize=2"));
+        var newestP2Ids = newestPage2.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetGuid()).ToList();
+        Assert.Equal(new[] { idA }, newestP2Ids);
+    }
+
     private static async Task<JsonElement> Json(HttpResponseMessage response)
     {
         var body = await response.Content.ReadAsStringAsync();

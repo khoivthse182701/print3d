@@ -13,12 +13,12 @@ Quyền truy cập: Bắt buộc Bearer JWT và thuộc role Management (`staff`
 Hàng đợi các tác vụ tạo 3D với bộ lọc kết hợp (AND), phân trang an toàn và sắp xếp ổn định.
 
 **Query parameters:**
-- `status` (string, tùy chọn): Giá trị enum `GenerationStatus` (`queued`, `processing`, `meshOptimizing`, `succeeded`, `failed`, `expired`, `needsAttention`). Chấp nhận tên enum (không phân biệt hoa thường) hoặc số nguyên định nghĩa hợp lệ. Giá trị không hợp lệ hoặc số undefined trả `400 ProblemDetails`.
-- `reviewStatus` (string, tùy chọn): Giá trị enum `PrintReviewStatus` (`pending`, `approved`, `rejected`).
+- `status` (string, tùy chọn): Giá trị enum `GenerationStatus` (`queued`, `processing`, `meshOptimizing`, `succeeded`, `failed`, `expired`, `needsAttention`). Chỉ chấp nhận một giá trị đơn (tên enum không phân biệt hoa thường hoặc số nguyên định nghĩa hợp lệ). Các chuỗi composite/phân tách bằng dấu phẩy (như `queued,processing`) hoặc số undefined trả `400 ProblemDetails`.
+- `reviewStatus` (string, tùy chọn): Giá trị enum `PrintReviewStatus` (`pending`, `approved`, `rejected`). Chỉ chấp nhận một giá trị đơn, composite trả `400 ProblemDetails`.
 - `provider` (string, tối đa 30 ký tự, tùy chọn): So khớp chính xác không phân biệt hoa thường sau khi trim (ví dụ: `meshy` khớp `Meshy`). Vượt quá 30 ký tự trả `400 ProblemDetails`.
 - `createdFromUtc` (string, ISO-8601 UTC/offset, tùy chọn): Mốc thời gian tạo từ (bao gồm — inclusive). Bắt buộc có timezone (ví dụ: `2026-10-25T10:00:00Z` hoặc `2026-10-25T17:00:00+07:00`). Thiếu timezone hoặc sai định dạng trả `400 ProblemDetails`.
 - `createdToUtc` (string, ISO-8601 UTC/offset, tùy chọn): Mốc thời gian tạo đến (không bao gồm — exclusive). Nếu `createdFromUtc >= createdToUtc` trả `400 ProblemDetails`.
-- `minAgeMinutes` (integer >= 0, tùy chọn): Độ tuổi tối thiểu theo phút, tính từ `CreatedAtUtc` so với thời điểm UTC server ghi nhận tại request (`capturedUtcNow`). Số âm trả `400 ProblemDetails`. Không dùng `NextPollAtUtc`.
+- `minAgeMinutes` (integer >= 0, tùy chọn): Độ tuổi tối thiểu theo phút, tính từ `CreatedAtUtc` so với thời điểm UTC server ghi nhận tại request (`capturedUtcNow`). Số âm trả `400 ProblemDetails`. Giá trị cực đại (như 2147483647 vượt quá khoảng thời gian từ mốc lịch sử) trả về kết quả rỗng `items: []` an toàn, không gây 500. Không dùng `NextPollAtUtc`.
 - `page` (integer, mặc định `1`): Chỉ số trang >= 1, tối đa 100000. Tràn chỉ số skip trả `400 ProblemDetails`. Trang vượt quá dữ liệu trả `items: []` kèm `totalCount` thực tế.
 - `pageSize` (integer, mặc định `20`): Số phần tử mỗi trang, khoảng hợp lệ `1..100`.
 - `sort` (string, mặc định `oldest`): Allowlist `oldest` hoặc `newest`. Sắp xếp theo `CreatedAtUtc` và tie-breaker `Id` cùng chiều (oldest: `CreatedAtUtc ASC, Id ASC`; newest: `CreatedAtUtc DESC, Id DESC`).
@@ -52,10 +52,10 @@ Hàng đợi các tác vụ tạo 3D với bộ lọc kết hợp (AND), phân t
 Hàng đợi các đơn hàng cần theo dõi vận hành fulfillment.
 
 **Query parameters:**
-- `status` (string, tùy chọn): Giá trị enum `OrderStatus` (`draft`, `pendingPayment`, `paid`, `sentToPartner`, `printing`, `reprinting`, `postProcessing`, `packaged`, `shipping`, `delivered`, `cancelled`, `refunded`).
+- `status` (string, tùy chọn): Giá trị enum `OrderStatus` (`draft`, `pendingPayment`, `paid`, `sentToPartner`, `printing`, `reprinting`, `postProcessing`, `packaged`, `shipping`, `delivered`, `cancelled`, `refunded`). Chỉ chấp nhận một giá trị đơn, composite trả `400 ProblemDetails`.
 - `orderCode` (string, tối đa 50 ký tự, tùy chọn): Mã đơn hàng so khớp chính xác sau khi trim (ví dụ: `TB-ORD-20261025-0001`). Vượt quá 50 ký tự trả `400 ProblemDetails`.
 - `createdFromUtc` / `createdToUtc`: Cùng quy tắc ISO-8601 kèm timezone và khoảng hợp lệ.
-- `minAgeMinutes`: Độ tuổi tối thiểu tính theo `CreatedAtUtc` so với `capturedUtcNow`.
+- `minAgeMinutes`: Độ tuổi tối thiểu tính theo `CreatedAtUtc` so với `capturedUtcNow`. Giá trị cực đại trả về kết quả rỗng `items: []` an toàn, không gây 500.
 - `page` / `pageSize` / `sort`: Envelope và sắp xếp tương tự route jobs.
 
 **Safe DTO response (200 OK):**

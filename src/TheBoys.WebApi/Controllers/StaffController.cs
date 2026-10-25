@@ -96,8 +96,8 @@ public sealed class StaffController(ISender mediator) : ApiControllerBase
                 x.Stage,
                 x.Progress,
                 x.ReviewStatus,
-                x.CreatedAtUtc,
-                x.CompletedAtUtc,
+                DateTime.SpecifyKind(x.CreatedAtUtc, DateTimeKind.Utc),
+                AsUtc(x.CompletedAtUtc),
                 x.AgeMinutes
             )).ToList(),
             result.Page,
@@ -171,15 +171,15 @@ public sealed class StaffController(ISender mediator) : ApiControllerBase
                 x.GenerationTaskId,
                 x.Status,
                 x.Quantity,
-                x.CreatedAtUtc,
+                DateTime.SpecifyKind(x.CreatedAtUtc, DateTimeKind.Utc),
                 x.AgeMinutes,
-                x.PaidAtUtc,
-                x.SentToPartnerAtUtc,
-                x.PrintingStartedAtUtc,
-                x.PackagedAtUtc,
-                x.ShippedAtUtc,
-                x.DeliveredAtUtc,
-                x.CancelledAtUtc
+                AsUtc(x.PaidAtUtc),
+                AsUtc(x.SentToPartnerAtUtc),
+                AsUtc(x.PrintingStartedAtUtc),
+                AsUtc(x.PackagedAtUtc),
+                AsUtc(x.ShippedAtUtc),
+                AsUtc(x.DeliveredAtUtc),
+                AsUtc(x.CancelledAtUtc)
             )).ToList(),
             result.Page,
             result.PageSize,
@@ -188,6 +188,8 @@ public sealed class StaffController(ISender mediator) : ApiControllerBase
 
         return Ok(response);
     }
+
+    private static DateTime? AsUtc(DateTime? dt) => dt.HasValue ? DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc) : null;
 
     private bool ValidatePagingAndSort(
         string? pageRaw,
@@ -301,7 +303,13 @@ public sealed class StaffController(ISender mediator) : ApiControllerBase
 
         var trimmed = value.Trim();
 
-        // Kiểm tra nếu là dạng số nguyên
+        // Chuỗi chứa dấu phẩy hoặc khoảng trắng là dạng danh sách/composite, không hợp lệ cho single enum
+        if (trimmed.Contains(',') || trimmed.Any(char.IsWhiteSpace))
+        {
+            return false;
+        }
+
+        // Kiểm tra nếu là dạng số nguyên định nghĩa hợp lệ
         if (int.TryParse(trimmed, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue))
         {
             if (Enum.IsDefined(typeof(T), intValue))
@@ -312,11 +320,14 @@ public sealed class StaffController(ISender mediator) : ApiControllerBase
             return false;
         }
 
-        // Kiểm tra nếu là tên chuỗi enum
-        if (Enum.TryParse<T>(trimmed, ignoreCase: true, out var parsed) && Enum.IsDefined(typeof(T), parsed))
+        // Kiểm tra nếu là tên chuỗi enum đơn (không phân biệt hoa thường)
+        foreach (var name in Enum.GetNames<T>())
         {
-            result = parsed;
-            return true;
+            if (string.Equals(name, trimmed, StringComparison.OrdinalIgnoreCase))
+            {
+                result = Enum.Parse<T>(name);
+                return true;
+            }
         }
 
         return false;
