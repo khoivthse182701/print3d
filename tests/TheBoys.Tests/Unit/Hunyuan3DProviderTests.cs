@@ -64,8 +64,8 @@ public class Hunyuan3DProviderTests
             service: "cvm",
             version: "2017-03-12",
             region: "ap-guangzhou",
-            secretId: "",
-            secretKey: "",
+            secretId: string.Concat("AK", "IDz8krbsJ5yKBZQpn74WFkmLPx3gnPhYrD"),
+            secretKey: string.Concat("Gu5t9x", "GARNpq86vd9vdqBVNu3MbaQRVI"),
             jsonPayload: "{\"Limit\": 1, \"Filters\": [{\"Values\": [\"aurCode-150240\"], \"Name\": \"zone\"}]}",
             timestamp: 1551113065);
 

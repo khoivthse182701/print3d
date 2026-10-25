@@ -15,7 +15,10 @@ using TheBoys.Application.Payments.Commands.CreateRefund;
 using TheBoys.Application.Payments.DTOs;
 using TheBoys.Application.Payments.Queries.GetOrderRefunds;
 using TheBoys.Application.Quotes;
+using TheBoys.Application.Common.Payments;
+using System.Security.Claims;
 using TheBoys.Domain.Entities;
+using TheBoys.Domain.Enums;
 using TheBoys.WebApi.Security;
 
 namespace TheBoys.WebApi.Controllers.v2;
@@ -46,6 +49,22 @@ public sealed class CreateRefundApiRequest
 {
     public decimal? AmountVnd { get; set; }
     public string? Reason { get; set; }
+}
+
+public sealed class TopupPaymentRequest
+{
+    public string PackageId { get; set; } = default!;
+}
+
+public sealed class TopupPaymentResponse
+{
+    public bool Success { get; set; }
+    public string PackageId { get; set; } = default!;
+    public decimal AmountVnd { get; set; }
+    public int Credits { get; set; }
+    public string MerchantReference { get; set; } = default!;
+    public string? CheckoutUrl { get; set; }
+    public string? QrCode { get; set; }
 }
 
 [ApiController, Route("api/v2/orders"), Authorize]
@@ -133,6 +152,136 @@ public sealed class OrdersV2Controller(ISender mediator, IApplicationDbContext d
 
         var (attempt, isReplay) = result.Value;
         return isReplay ? Ok(attempt) : StatusCode(StatusCodes.Status201Created, attempt);
+    }
+
+    [HttpPost("/api/v2/payments/topup")]
+    public async Task<IActionResult> Topup(
+        [FromBody] TopupPaymentRequest request,
+        [FromServices] IPaymentGatewayRegistry gatewayRegistry,
+        [FromServices] IClock clock,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request?.PackageId))
+            return BadRequest(new { message = "Gói nạp packageId là bắt buộc (starter, creator, studio)." });
+
+        var pkg = request.PackageId.Trim().ToLowerInvariant();
+        decimal amountVnd;
+        int credits;
+
+        switch (pkg)
+        {
+            case "starter":
+                amountVnd = 50000m;
+                credits = 3;
+                break;
+            case "creator":
+                amountVnd = 120000m;
+                credits = 10;
+                break;
+            case "studio":
+                amountVnd = 290000m;
+                credits = 30;
+                break;
+            default:
+                return BadRequest(new { message = "Gói nạp không hợp lệ. Chọn starter, creator hoặc studio." });
+        }
+
+        IPaymentGateway gateway;
+        try
+        {
+            gateway = gatewayRegistry.ResolveGateway("PayOS");
+            if (!gateway.IsConfigured)
+            {
+                gateway = gatewayRegistry.ResolveActiveGateway();
+            }
+        }
+        catch
+        {
+            gateway = gatewayRegistry.ResolveActiveGateway();
+        }
+
+        var now = clock.UtcNow;
+        var merchantReference = $"TOPUP_{pkg}_{UserId}_{Guid.NewGuid():N}";
+
+        var package = await db.PricingPackages.FirstOrDefaultAsync(ct);
+        if (package == null)
+        {
+            package = new PricingPackage
+            {
+                Id = Guid.NewGuid(),
+                PackageCode = "TIER_TOPUP_AUTO",
+                Name = "Topup Auto Package",
+                Material = "PLA",
+                PriceVnd = amountVnd,
+                PartnerBaseCostVnd = 0,
+                IsActive = true,
+                CreatedAtUtc = now
+            };
+            db.PricingPackages.Add(package);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var topupOrder = new Order
+        {
+            Id = Guid.NewGuid(),
+            OrderCode = $"TOPUP-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..30],
+            UserId = UserId,
+            PricingPackageId = package.Id,
+            Status = OrderStatus.Draft,
+            FulfillmentStatus = "PendingPayment",
+            OrderPaymentStatus = "Unpaid",
+            TotalAmount = amountVnd,
+            Currency = "VND",
+            ReceiverName = User.FindFirst(ClaimTypes.Name)?.Value ?? "Customer",
+            ReceiverPhone = "0900000000",
+            StreetAddress = "Topup Online",
+            District = "Topup",
+            City = "TP HCM",
+            CreatedAtUtc = now
+        };
+        db.Orders.Add(topupOrder);
+
+        var expiresAtUtc = now.AddMinutes(15);
+        var attempt = PaymentAttempt.Create(
+            topupOrder.Id,
+            gateway.GatewayName,
+            merchantReference,
+            amountVnd,
+            "VND",
+            expiresAtUtc,
+            now,
+            clientRequestId: Guid.NewGuid().ToString("N"),
+            requestFingerprint: $"TOPUP_{pkg}"
+        );
+        db.PaymentAttempts.Add(attempt);
+        await db.SaveChangesAsync(ct);
+
+        var checkoutResult = await gateway.CreateCheckoutAsync(new CreateCheckoutRequest(
+            topupOrder.Id,
+            merchantReference,
+            amountVnd,
+            "VND",
+            Description: merchantReference.Length > 25 ? merchantReference[..25] : merchantReference,
+            ReturnUrl: "https://print3d.theboys.vn/pricing/topup-success",
+            CancelUrl: "https://print3d.theboys.vn/pricing/topup-cancel"
+        ), ct);
+
+        if (checkoutResult.Success)
+        {
+            attempt.SetCheckoutAction(checkoutResult.CheckoutUrl, checkoutResult.ProviderTransactionId, checkoutResult.QrCode);
+            await db.SaveChangesAsync(ct);
+        }
+
+        return Ok(new TopupPaymentResponse
+        {
+            Success = checkoutResult.Success,
+            PackageId = pkg,
+            AmountVnd = amountVnd,
+            Credits = credits,
+            MerchantReference = merchantReference,
+            CheckoutUrl = checkoutResult.CheckoutUrl,
+            QrCode = checkoutResult.QrCode
+        });
     }
 
     [HttpGet("{id:guid}/payment-attempts")]

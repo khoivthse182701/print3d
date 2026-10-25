@@ -259,9 +259,9 @@ public class OrderB02AndB03Tests(DemoFactory factory) : IClassFixture<DemoFactor
         var quoteDto = quoteRes.Value;
 
         // Verify financial calculations
-        Assert.Equal(390000, quoteDto.UnitPriceVnd);
+        Assert.Equal(240625, quoteDto.UnitPriceVnd);
         Assert.Equal(15000, quoteDto.ShippingFeeVnd);
-        Assert.Equal(390000 * 2 + 15000, quoteDto.TotalVnd);
+        Assert.Equal(240625 * 2 + 15000, quoteDto.TotalVnd);
         Assert.Equal(clock.UtcNow.AddMinutes(30), quoteDto.ExpiresAtUtc);
         Assert.False(quoteDto.IsExpired);
 
@@ -297,7 +297,7 @@ public class OrderB02AndB03Tests(DemoFactory factory) : IClassFixture<DemoFactor
 
         Assert.True(quoteRes.IsSuccess);
         var quoteId = quoteRes.Value.Id;
-        Assert.Equal(390000, quoteRes.Value.TotalVnd);
+        Assert.Equal(240625, quoteRes.Value.TotalVnd);
 
         // Mutate package price in memory/db
         var originalPrice = package.PriceVnd;
@@ -306,8 +306,8 @@ public class OrderB02AndB03Tests(DemoFactory factory) : IClassFixture<DemoFactor
 
         // Re-read quote: price must still be 390.000 VND (immutable historical snapshot)
         var quoteInDb = await db.Quotes.SingleAsync(q => q.Id == quoteId);
-        Assert.Equal(390000, quoteInDb.UnitPriceVnd);
-        Assert.Equal(390000, quoteInDb.TotalVnd);
+        Assert.Equal(240625, quoteInDb.UnitPriceVnd);
+        Assert.Equal(240625, quoteInDb.TotalVnd);
 
         // Reset package price back
         package.PriceVnd = originalPrice;
@@ -397,7 +397,7 @@ public class OrderB02AndB03Tests(DemoFactory factory) : IClassFixture<DemoFactor
         Assert.Equal("PendingPayment", order.FulfillmentStatus);
         Assert.Equal("Unpaid", order.OrderPaymentStatus);
         Assert.Equal(quoteId, order.QuoteId);
-        Assert.Equal(390000 * 2 + 10000, order.TotalAmount);
+        Assert.Equal(240625 * 2 + 10000, order.TotalAmount);
 
         // Verify OrderItem and OrderStatusHistory in DB
         var savedOrder = await db.Orders
@@ -408,7 +408,7 @@ public class OrderB02AndB03Tests(DemoFactory factory) : IClassFixture<DemoFactor
         Assert.Single(savedOrder.Items);
         Assert.Equal(1, savedOrder.Items.First().LineNumber);
         Assert.Equal(2, savedOrder.Items.First().Quantity);
-        Assert.Equal(390000, savedOrder.Items.First().UnitPriceVnd);
+        Assert.Equal(240625, savedOrder.Items.First().UnitPriceVnd);
 
         Assert.Equal(2, savedOrder.StatusHistories.Count);
         Assert.Contains(savedOrder.StatusHistories, h => h.Axis == "Fulfillment" && h.ToStatus == "PendingPayment");

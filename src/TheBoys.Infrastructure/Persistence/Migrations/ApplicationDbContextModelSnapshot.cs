@@ -2097,6 +2097,9 @@ namespace TheBoys.Infrastructure.Persistence.Migrations
                         .IsUnicode(false)
                         .HasColumnType("varchar(150)");
 
+                    b.Property<string>("QrCode")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("RequestFingerprint")
                         .HasMaxLength(150)
                         .IsUnicode(false)

@@ -328,6 +328,123 @@ public sealed class CreditService(IApplicationDbContext db, IClock clock) : ICre
         return Result<CreditGrantReceipt>.Failure(Error.Conflict("ConcurrencyConflict", "Hệ thống đang bận xử lý số dư. Vui lòng thử lại."));
     }
 
+    public async Task<Result<CreditGrantReceipt>> AddPurchasedCreditsAsync(
+        Guid userId,
+        int amount,
+        string operationKey,
+        string reason,
+        CancellationToken ct)
+    {
+        if (amount <= 0)
+            return Result<CreditGrantReceipt>.Failure(Error.Validation("InvalidAmount", "Số credit mua phải lớn hơn 0."));
+
+        if (string.IsNullOrWhiteSpace(reason))
+            return Result<CreditGrantReceipt>.Failure(Error.Validation("ReasonRequired", "Lý do nạp credit là bắt buộc."));
+
+        if (string.IsNullOrWhiteSpace(operationKey))
+            return Result<CreditGrantReceipt>.Failure(Error.Validation("OperationKeyRequired", "Operation key là bắt buộc."));
+
+        var dbContext = db as DbContext;
+        var hasExistingTx = dbContext?.Database.CurrentTransaction != null;
+
+        for (var attempt = 0; attempt < MaxConcurrencyRetries; attempt++)
+        {
+            var tx = hasExistingTx ? null : await db.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+            try
+            {
+                var account = await db.CreditAccounts
+                    .SingleOrDefaultAsync(x => x.UserId == userId, ct);
+
+                if (account == null)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return Result<CreditGrantReceipt>.Failure(Error.NotFound("CreditAccountNotFound", "Tài khoản credit không tồn tại."));
+                }
+
+                // Check replay of same idempotency/operation key for this user
+                var existingEntry = await db.CreditLedger
+                    .SingleOrDefaultAsync(x => x.UserId == userId && x.OperationKey == operationKey, ct);
+
+                if (existingEntry != null)
+                {
+                    if (tx != null) await tx.RollbackAsync(ct);
+                    return Result<CreditGrantReceipt>.Success(new CreditGrantReceipt(
+                        userId,
+                        existingEntry.Delta,
+                        account.TrialBalance,
+                        account.PurchasedBalance
+                    ));
+                }
+
+                account.GrantPurchased(amount);
+
+                var ledgerEntry = CreditLedgerEntry.CreateAdminAdjustment(
+                    userId,
+                    CreditBucket.Purchased,
+                    amount,
+                    userId,
+                    operationKey,
+                    reason,
+                    clock.UtcNow
+                );
+
+                db.CreditLedger.Add(ledgerEntry);
+
+                // Synchronize legacy User fields for temporary caller backward-compatibility
+                var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId, ct);
+                if (user != null)
+                {
+                    user.PurchasedRemaining = account.PurchasedBalance;
+                }
+
+                var audit = AuditLog.Create(
+                    userId,
+                    "Credit.TopUp",
+                    "CreditAccount",
+                    userId,
+                    operationKey,
+                    System.Text.Json.JsonSerializer.Serialize(new { amount, reason = reason.Trim(), bucket = "Purchased" }),
+                    reason.Trim(),
+                    clock.UtcNow
+                );
+                db.AuditLogs.Add(audit);
+
+                await db.SaveChangesAsync(ct);
+                if (tx != null) await tx.CommitAsync(ct);
+
+                return Result<CreditGrantReceipt>.Success(new CreditGrantReceipt(
+                    userId,
+                    amount,
+                    account.TrialBalance,
+                    account.PurchasedBalance
+                ));
+            }
+            catch (Exception ex) when (!hasExistingTx && attempt < MaxConcurrencyRetries - 1 && IsTransientOrConcurrency(ex))
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                dbContext?.ChangeTracker.Clear();
+                await Task.Delay(25 * (attempt + 1), ct);
+            }
+            catch (Exception ex) when (!hasExistingTx && attempt == MaxConcurrencyRetries - 1 && IsTransientOrConcurrency(ex))
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                return Result<CreditGrantReceipt>.Failure(Error.Conflict("ConcurrencyConflict", "Hệ thống đang bận xử lý số dư. Vui lòng thử lại."));
+            }
+            catch
+            {
+                if (tx != null) await tx.RollbackAsync(ct);
+                if (!hasExistingTx) dbContext?.ChangeTracker.Clear();
+                throw;
+            }
+            finally
+            {
+                if (tx != null) await tx.DisposeAsync();
+            }
+        }
+
+        return Result<CreditGrantReceipt>.Failure(Error.Conflict("ConcurrencyConflict", "Hệ thống đang bận xử lý số dư. Vui lòng thử lại."));
+    }
+
     public async Task<CreditBalanceDto> GetBalanceAsync(Guid userId, CancellationToken ct)
     {
         var account = await db.CreditAccounts.AsNoTracking()

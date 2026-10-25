@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditService, Services.AuditService>();
         services.AddScoped<IConsentService, Services.ConsentService>();
         services.AddSingleton<IImageValidationService, Services.SkiaImageValidationService>();
+        services.AddSingleton<IContentModerationService, Services.ContentModerationService>();
         services.AddScoped<IEmailSender, Services.EmailSender>();
         services.AddSingleton<IPrint3dTelemetry, Services.Print3dTelemetry>();
 

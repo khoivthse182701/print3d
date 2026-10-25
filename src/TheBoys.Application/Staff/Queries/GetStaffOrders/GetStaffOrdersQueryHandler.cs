@@ -83,7 +83,7 @@ public sealed class GetStaffOrdersQueryHandler(IApplicationDbContext db)
         var items = records.Select(x => new StaffOrderItem(
             x.Id,
             x.OrderCode,
-            x.GenerationTaskId,
+            x.GenerationTaskId ?? Guid.Empty,
             x.Status,
             x.Quantity,
             DateTime.SpecifyKind(x.CreatedAtUtc, DateTimeKind.Utc),

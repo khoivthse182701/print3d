@@ -54,9 +54,9 @@ public class CreditAndIdentityTests(DemoFactory factory) : IClassFixture<DemoFac
 
         // Credit Account
         Assert.NotNull(user.CreditAccount);
-        Assert.Equal(2, user.CreditAccount.TrialBalance);
+        Assert.Equal(1, user.CreditAccount.TrialBalance);
         Assert.Equal(0, user.CreditAccount.PurchasedBalance);
-        Assert.Equal(2, user.CreditAccount.TotalBalance);
+        Assert.Equal(1, user.CreditAccount.TotalBalance);
 
         // Append-only Credit Ledger
         var ledgerEntries = await db.CreditLedger.Where(e => e.UserId == user.Id).ToListAsync();
@@ -64,7 +64,7 @@ public class CreditAndIdentityTests(DemoFactory factory) : IClassFixture<DemoFac
         var entry = ledgerEntries.First();
         Assert.Equal(CreditBucket.Trial, entry.Bucket);
         Assert.Equal(CreditLedgerKind.TrialGrant, entry.Kind);
-        Assert.Equal(2, entry.Delta);
+        Assert.Equal(1, entry.Delta);
         Assert.StartsWith("register:trial:", entry.OperationKey);
 
         // Email verification token
@@ -579,7 +579,7 @@ public class CreditAndIdentityTests(DemoFactory factory) : IClassFixture<DemoFac
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var account = await db.CreditAccounts.SingleAsync(x => x.UserId == userId);
-            Assert.Equal(2, account.TrialBalance);
+            Assert.Equal(1, account.TrialBalance);
         }
 
         // 2. Grant consent via API
@@ -606,7 +606,7 @@ public class CreditAndIdentityTests(DemoFactory factory) : IClassFixture<DemoFac
         {
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
             var account = await db.CreditAccounts.SingleAsync(x => x.UserId == userId);
-            Assert.Equal(1, account.TrialBalance);
+            Assert.Equal(0, account.TrialBalance);
         }
     }
 

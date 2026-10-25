@@ -137,8 +137,76 @@ public sealed class CreateQuoteCommandHandler(
         if (heightMm < package.MinHeightMm || heightMm > package.MaxHeightMm)
             return Result<QuoteDto>.Failure(Error.Validation("HeightOutOfRange", $"Chiều cao in ({heightMm:F1}mm) không nằm trong khoảng [{package.MinHeightMm} - {package.MaxHeightMm}mm] của gói đã chọn."));
 
-        // Server-side financial calculations
-        var unitPriceVnd = package.PriceVnd;
+        // Volumetric & Surface Area Pricing (Agent 1 Specification)
+        // Formula: SetupFee + (V_scaled * Infill * PricePerCm3) + (A_scaled * SurfaceRate)
+        decimal baseVolume = version.VolumeCm3 ?? 30.0m;
+        decimal baseArea = 120.0m; // Fallback in cm2
+
+        if (version.WidthMm > 0 && version.DepthMm > 0 && version.HeightMm > 0)
+        {
+            var wCm = version.WidthMm / 10m;
+            var dCm = version.DepthMm / 10m;
+            var hCm = version.HeightMm / 10m;
+            baseArea = 2 * (wCm * dCm + wCm * hCm + dCm * hCm) * 0.7m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(version.AnalysisJson))
+        {
+            try
+            {
+                using var analysisDoc = JsonDocument.Parse(version.AnalysisJson);
+                if (analysisDoc.RootElement.TryGetProperty("metrics", out var metrics))
+                {
+                    if (metrics.TryGetProperty("surface_area", out var saElem) && saElem.TryGetDecimal(out var saVal))
+                        baseArea = saVal > 5 ? saVal : saVal * 10000m;
+                    else if (metrics.TryGetProperty("area", out var aElem) && aElem.TryGetDecimal(out var aVal))
+                        baseArea = aVal > 5 ? aVal : aVal * 10000m;
+                }
+            }
+            catch { }
+        }
+
+        // Scale by target height ratio
+        decimal baseHeight = version.HeightMm > 0 ? version.HeightMm : 100m;
+        decimal scaleFactor = heightMm / baseHeight;
+        decimal volumeScaled = baseVolume * scaleFactor * scaleFactor * scaleFactor;
+        decimal areaScaled = baseArea * scaleFactor * scaleFactor;
+
+        // Material parameter mapping per TEAM_STATE.md
+        var mat = (package.Material ?? "").Trim().ToLowerInvariant();
+        decimal setupFee;
+        decimal infill;
+        decimal pricePerCm3;
+        decimal surfaceRate;
+
+        if (mat.Contains("resin") || mat.Contains("sla"))
+        {
+            setupFee = 50000m;
+            infill = 0.85m;
+            pricePerCm3 = 6500m;
+            surfaceRate = 300m;
+        }
+        else if (mat.Contains("abs") || mat.Contains("petg"))
+        {
+            setupFee = 40000m;
+            infill = 0.40m;
+            pricePerCm3 = 3500m;
+            surfaceRate = 200m;
+        }
+        else // PLA / Default
+        {
+            setupFee = 35000m;
+            infill = 0.25m;
+            pricePerCm3 = 2500m;
+            surfaceRate = 150m;
+        }
+
+        var unitPriceVnd = Math.Round(
+            setupFee + (volumeScaled * infill * pricePerCm3) + (areaScaled * surfaceRate),
+            0,
+            MidpointRounding.AwayFromZero
+        );
+
         var shippingFeeVnd = options.Value.DefaultShippingFeeVnd;
         var addressJson = JsonSerializer.Serialize(request.Address, JsonOptions);
 
@@ -153,7 +221,19 @@ public sealed class CreateQuoteCommandHandler(
             dimensions = new { widthMm = version.WidthMm, depthMm = version.DepthMm, heightMm = version.HeightMm },
             geometryHash = Convert.ToHexString(version.GeometryHash).ToLowerInvariant(),
             policyVersion = approval.PolicyVersion,
-            configurationJson = canonicalConfigJson
+            configurationJson = canonicalConfigJson,
+            volumetricPricing = new
+            {
+                baseVolumeCm3 = baseVolume,
+                baseAreaCm2 = baseArea,
+                volumeScaledCm3 = volumeScaled,
+                areaScaledCm2 = areaScaled,
+                setupFeeVnd = setupFee,
+                infillRatio = infill,
+                pricePerCm3Vnd = pricePerCm3,
+                surfaceRateVnd = surfaceRate,
+                calculatedUnitPriceVnd = unitPriceVnd
+            }
         };
         var snapshotJson = JsonSerializer.Serialize(snapshotObj, JsonOptions);
 
