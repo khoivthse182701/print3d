@@ -1,6 +1,107 @@
 # Hợp đồng BE–FE
 
-FE và BE riêng repo. Bảng API hiện tại ở [inventory](../review/flow-inventory.vi.md); route v2 dưới đây là **đề xuất chưa triển khai**. OpenAPI runtime hiện tại là nguồn contract cho FE đang chạy, không dùng endpoint v2 trước khi PR tương ứng được merge/deploy.
+FE và BE riêng repo. Bảng API hiện tại ở [inventory](../review/flow-inventory.vi.md); các endpoint trong mục **Route v2 đã triển khai** đã có handler thực tế và kiểm chứng integration; các route v2 còn lại trong bảng dưới là **đề xuất chưa triển khai**. OpenAPI runtime hiện tại là nguồn contract cho FE đang chạy, không dùng endpoint v2 đề xuất trước khi PR tương ứng được merge/deploy.
+
+## Route v2 đã triển khai (STAFF-001 — Slice hàng đợi vận hành Staff)
+
+Phạm vi: Cung cấp hàng đợi vận hành đọc (read-only) phục vụ điều phối kỹ thuật và đơn hàng theo **FR-21, UC-17 (một phần)**. Chưa bao gồm reconcile/review/history toàn diện (thuộc các task kế tiếp STAFF-002, STAFF-003).
+
+Quyền truy cập: Bắt buộc Bearer JWT và thuộc role Management (`staff` hoặc `admin`). Anonymous trả `401 Unauthorized`; Customer (`cus`) trả `403 Forbidden`.
+
+### 1. GET `/api/v2/staff/generation-jobs`
+
+Hàng đợi các tác vụ tạo 3D với bộ lọc kết hợp (AND), phân trang an toàn và sắp xếp ổn định.
+
+**Query parameters:**
+- `status` (string, tùy chọn): Giá trị enum `GenerationStatus` (`queued`, `processing`, `meshOptimizing`, `succeeded`, `failed`, `expired`, `needsAttention`). Chỉ chấp nhận một giá trị đơn (tên enum không phân biệt hoa thường hoặc số nguyên định nghĩa hợp lệ). Các chuỗi composite/phân tách bằng dấu phẩy (như `queued,processing`) hoặc số undefined trả `400 ProblemDetails`.
+- `reviewStatus` (string, tùy chọn): Giá trị enum `PrintReviewStatus` (`pending`, `approved`, `rejected`). Chỉ chấp nhận một giá trị đơn, composite trả `400 ProblemDetails`.
+- `provider` (string, tối đa 30 ký tự, tùy chọn): So khớp chính xác không phân biệt hoa thường sau khi trim (ví dụ: `meshy` khớp `Meshy`). Vượt quá 30 ký tự trả `400 ProblemDetails`.
+- `createdFromUtc` (string, ISO-8601 UTC/offset, tùy chọn): Mốc thời gian tạo từ (bao gồm — inclusive). Bắt buộc có timezone (ví dụ: `2026-10-25T10:00:00Z` hoặc `2026-10-25T17:00:00+07:00`). Thiếu timezone hoặc sai định dạng trả `400 ProblemDetails`.
+- `createdToUtc` (string, ISO-8601 UTC/offset, tùy chọn): Mốc thời gian tạo đến (không bao gồm — exclusive). Nếu `createdFromUtc >= createdToUtc` trả `400 ProblemDetails`.
+- `minAgeMinutes` (integer >= 0, tùy chọn): Độ tuổi tối thiểu theo phút, tính từ `CreatedAtUtc` so với thời điểm UTC server ghi nhận tại request (`capturedUtcNow`). Số âm trả `400 ProblemDetails`. Giá trị cực đại (như 2147483647 vượt quá khoảng thời gian từ mốc lịch sử) trả về kết quả rỗng `items: []` an toàn, không gây 500. Không dùng `NextPollAtUtc`.
+- `page` (integer, mặc định `1`): Chỉ số trang >= 1, tối đa 100000. Tràn chỉ số skip trả `400 ProblemDetails`. Trang vượt quá dữ liệu trả `items: []` kèm `totalCount` thực tế.
+- `pageSize` (integer, mặc định `20`): Số phần tử mỗi trang, khoảng hợp lệ `1..100`.
+- `sort` (string, mặc định `oldest`): Allowlist `oldest` hoặc `newest`. Sắp xếp theo `CreatedAtUtc` và tie-breaker `Id` cùng chiều (oldest: `CreatedAtUtc ASC, Id ASC`; newest: `CreatedAtUtc DESC, Id DESC`).
+
+**Safe DTO response (200 OK):**
+```json
+{
+  "items": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "modelName": "Robot Warrior",
+      "provider": "Meshy",
+      "status": "succeeded",
+      "stage": "complete",
+      "progress": 100,
+      "reviewStatus": "pending",
+      "createdAtUtc": "2026-10-25T12:00:00Z",
+      "completedAtUtc": "2026-10-25T12:05:00Z",
+      "ageMinutes": 45
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 1
+}
+```
+*Lưu ý bảo mật (AC-05):* DTO tuyệt đối không chứa raw `errorMessage`, provider IDs/URLs (`providerTaskId`, `resizeTaskId`, ...), đường dẫn lưu trữ file (`storagePathGlb`, `storagePathStl`), request fingerprint, client request ID, raw JSON printability, email/phone/address hoặc secret.
+
+### 2. GET `/api/v2/staff/orders`
+
+Hàng đợi các đơn hàng cần theo dõi vận hành fulfillment.
+
+**Query parameters:**
+- `status` (string, tùy chọn): Giá trị enum `OrderStatus` (`draft`, `pendingPayment`, `paid`, `sentToPartner`, `printing`, `reprinting`, `postProcessing`, `packaged`, `shipping`, `delivered`, `cancelled`, `refunded`). Chỉ chấp nhận một giá trị đơn, composite trả `400 ProblemDetails`.
+- `orderCode` (string, tối đa 50 ký tự, tùy chọn): Mã đơn hàng so khớp chính xác sau khi trim (ví dụ: `TB-ORD-20261025-0001`). Vượt quá 50 ký tự trả `400 ProblemDetails`.
+- `createdFromUtc` / `createdToUtc`: Cùng quy tắc ISO-8601 kèm timezone và khoảng hợp lệ.
+- `minAgeMinutes`: Độ tuổi tối thiểu tính theo `CreatedAtUtc` so với `capturedUtcNow`. Giá trị cực đại trả về kết quả rỗng `items: []` an toàn, không gây 500.
+- `page` / `pageSize` / `sort`: Envelope và sắp xếp tương tự route jobs.
+
+**Safe DTO response (200 OK):**
+```json
+{
+  "items": [
+    {
+      "id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+      "orderCode": "TB-ORD-20261025-0001",
+      "generationTaskId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "status": "printing",
+      "quantity": 1,
+      "createdAtUtc": "2026-10-25T11:30:00Z",
+      "ageMinutes": 75,
+      "paidAtUtc": null,
+      "sentToPartnerAtUtc": null,
+      "printingStartedAtUtc": "2026-10-25T12:00:00Z",
+      "packagedAtUtc": null,
+      "shippedAtUtc": null,
+      "deliveredAtUtc": null,
+      "cancelledAtUtc": null
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 1
+}
+```
+*Lưu ý nghiệp vụ & bảo mật (AC-03, AC-05):* DTO không chứa ghi chú khách hàng (`customerNote`), PII người nhận (`receiverName`, `receiverPhone`, `streetAddress`, ...), ngân sách tài chính (`partnerCostSnapshot`, `aiCostBudgetSnapshot`, ...), tổng tiền/giá hoặc raw payment. Không suy diễn thanh toán từ demo hoặc lấy snapshot ngân sách làm chi phí thực tế.
+
+### 3. Định dạng lỗi (RFC 7807 ProblemDetails)
+
+Khi tham số không hợp lệ (enum không tồn tại / undefined number, sort ngoài allowlist, page/pageSize sai, age âm, ngày thiếu timezone hoặc from >= to, provider/orderCode vượt độ dài), hệ thống trả về mã `400 Bad Request` với cấu trúc `ProblemDetails` chứa `traceId`:
+```json
+{
+  "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Tham số 'createdFromUtc' phải có định dạng ngày giờ ISO-8601 kèm múi giờ rõ ràng (ví dụ: '2026-10-25T10:00:00Z' hoặc '2026-10-25T17:00:00+07:00').",
+  "instance": "/api/v2/staff/generation-jobs",
+  "code": "InvalidCreatedFromUtc",
+  "traceId": "0HN1234567890:00000001"
+}
+```
+
+---
 
 ## Quy tắc chung v2
 

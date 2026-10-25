@@ -65,10 +65,12 @@ Baseline `04874ed`, 19/10/2026. **Có** = có code thực thi; **Một phần** 
 | PATCH | `/api/admin/users/{id}/role` | Admin | Đổi role + evict local cache |
 | POST | `/api/admin/users/{id}/credits` | Admin | Tăng PurchasedRemaining |
 | PATCH | `/api/admin/pricing-packages/{id}` | Admin | Giá/IsActive |
+| GET | `/api/v2/staff/generation-jobs` | Staff/Admin | Hàng đợi tác vụ tạo 3D; filter status/review/provider/date/age, paging, sort oldest/newest |
+| GET | `/api/v2/staff/orders` | Staff/Admin | Hàng đợi đơn hàng; filter status/orderCode/date/age, paging, sort oldest/newest |
 | GET | `/` | Public | Redirect Scalar; UI docs chỉ mapped Development |
 | GET | `/health` | Public | Liveness luôn ok |
 
-Tổng **20 controller endpoints + 2 minimal endpoints = 22** (đếm mỗi HTTP method + route template một lần; route file `{kind}` tính một). OpenAPI/Scalar Development là công cụ tài liệu, không tính luồng nghiệp vụ.
+Tổng **22 controller endpoints + 2 minimal endpoints = 24** (đếm mỗi HTTP method + route template một lần; route file `{kind}` tính một). OpenAPI/Scalar Development là công cụ tài liệu, không tính luồng nghiệp vụ.
 
 ## Đồ thị trạng thái thực sự reachable
 
