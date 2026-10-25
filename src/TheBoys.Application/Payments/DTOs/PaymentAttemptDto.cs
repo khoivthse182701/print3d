@@ -13,6 +13,7 @@ public sealed record PaymentAttemptDto(
     DateTime CreatedAtUtc,
     DateTime? CapturedAtUtc,
     string? CheckoutUrl,
-    string? FailureReason
+    string? FailureReason,
+    string? QrCode = null
 );
 

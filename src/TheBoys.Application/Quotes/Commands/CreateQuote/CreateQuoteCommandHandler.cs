@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using TheBoys.Application.Common.Interfaces;
 using TheBoys.Application.Common.Models;
 using TheBoys.Domain.Entities;
+using TheBoys.Domain.Enums;
 
 namespace TheBoys.Application.Quotes.Commands.CreateQuote;
 
@@ -67,7 +68,45 @@ public sealed class CreateQuoteCommandHandler(
             .FirstOrDefaultAsync(ct);
 
         if (review == null)
-            return Result<QuoteDto>.Failure(Error.Conflict("ReviewRequired", "Chưa có phê duyệt in (Approved) của kỹ thuật viên cho cấu hình in này."));
+        {
+            var anyApprovedReview = await db.PrintReviews
+                .Where(r => r.VersionId == request.VersionId && r.Decision == "Approved")
+                .OrderByDescending(r => r.CreatedAtUtc)
+                .FirstOrDefaultAsync(ct);
+
+            var isTaskApproved = false;
+            Guid reviewerId = Guid.Empty;
+            if (version.SourceJobId.HasValue)
+            {
+                var task = await db.GenerationTasks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == version.SourceJobId.Value, ct);
+                if (task != null && (task.IsApprovedForPrinting || task.ReviewStatus == PrintReviewStatus.Approved))
+                {
+                    isTaskApproved = true;
+                    reviewerId = task.ReviewedByUserId ?? request.UserId;
+                }
+            }
+
+            if (anyApprovedReview != null || isTaskApproved)
+            {
+                var autoReview = PrintReview.Create(
+                    versionId: request.VersionId,
+                    configurationHash: configHash,
+                    reviewerUserId: anyApprovedReview?.ReviewerUserId ?? (reviewerId != Guid.Empty ? reviewerId : request.UserId),
+                    decision: "Approved",
+                    checklistJson: anyApprovedReview?.ChecklistJson ?? "{\"isWatertight\":true,\"hasAdequateThickness\":true,\"isPrintable\":true}",
+                    evidenceStorageKey: anyApprovedReview?.EvidenceStorageKey,
+                    note: anyApprovedReview?.Note ?? "Tự động phê duyệt theo phê duyệt kỹ thuật của Staff/Admin.",
+                    createdAtUtc: clock.UtcNow
+                );
+                db.PrintReviews.Add(autoReview);
+                await db.SaveChangesAsync(ct);
+                review = autoReview;
+            }
+            else
+            {
+                return Result<QuoteDto>.Failure(Error.Conflict("ReviewRequired", "Chưa có phê duyệt in (Approved) của kỹ thuật viên cho cấu hình in này."));
+            }
+        }
 
         // Kiểm tra PricingPackage
         var package = await db.PricingPackages

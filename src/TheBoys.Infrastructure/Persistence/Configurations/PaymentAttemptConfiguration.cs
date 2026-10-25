@@ -69,6 +69,8 @@ public sealed class PaymentAttemptConfiguration : IEntityTypeConfiguration<Payme
         builder.Property(x => x.CheckoutUrl)
             .HasMaxLength(1000);
 
+        builder.Property(x => x.QrCode);
+
         builder.Property(x => x.FailureReason)
             .HasMaxLength(500);
 

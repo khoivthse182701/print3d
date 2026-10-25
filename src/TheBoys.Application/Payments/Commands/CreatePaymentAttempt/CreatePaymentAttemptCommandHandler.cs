@@ -131,7 +131,7 @@ public sealed class CreatePaymentAttemptCommandHandler(
 
         if (checkoutResult.Success)
         {
-            attempt.SetCheckoutAction(checkoutResult.CheckoutUrl, checkoutResult.ProviderTransactionId);
+            attempt.SetCheckoutAction(checkoutResult.CheckoutUrl, checkoutResult.ProviderTransactionId, checkoutResult.QrCode);
         }
         else
         {
@@ -157,6 +157,7 @@ public sealed class CreatePaymentAttemptCommandHandler(
             pa.CreatedAtUtc,
             pa.CapturedAtUtc,
             pa.CheckoutUrl,
-            pa.FailureReason
+            pa.FailureReason,
+            pa.QrCode
         );
 }

@@ -11,7 +11,8 @@ namespace TheBoys.Application.Generations.Queries;
 public sealed record GetGenerationTasksQuery(
     Guid UserId,
     bool IsManagement,
-    int Page = 1
+    int Page = 1,
+    bool OnlyMine = false
 ) : IRequest<IReadOnlyList<GenerationTask>>;
 
 public sealed class GetGenerationTasksQueryHandler(IApplicationDbContext db)
@@ -20,7 +21,7 @@ public sealed class GetGenerationTasksQueryHandler(IApplicationDbContext db)
     public async Task<IReadOnlyList<GenerationTask>> Handle(GetGenerationTasksQuery request, CancellationToken ct)
     {
         var query = db.GenerationTasks.AsNoTracking();
-        if (!request.IsManagement) query = query.Where(x => x.UserId == request.UserId);
+        if (!request.IsManagement || request.OnlyMine) query = query.Where(x => x.UserId == request.UserId);
         return await query.OrderByDescending(x => x.CreatedAtUtc)
             .Skip((request.Page - 1) * 20)
             .Take(20)

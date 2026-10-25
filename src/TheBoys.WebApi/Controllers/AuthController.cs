@@ -60,7 +60,7 @@ public sealed class ConsentRequest
     public bool Granted { get; set; } = true;
 }
 
-[ApiController, Route("api/auth"), EnableRateLimiting("auth")]
+[ApiController, Route("api/auth")]
 public sealed class AuthController(
     IApplicationDbContext db,
     IPasswordHasher<User> hasher,
@@ -71,7 +71,7 @@ public sealed class AuthController(
     IClock clock,
     IHostEnvironment environment) : ApiControllerBase
 {
-    [HttpPost("register"), AllowAnonymous]
+    [HttpPost("register"), AllowAnonymous, EnableRateLimiting("auth")]
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken ct)
     {
         var email = request.Email.Trim().ToLowerInvariant();
@@ -141,7 +141,7 @@ public sealed class AuthController(
         });
     }
 
-    [HttpPost("verify-email"), AllowAnonymous]
+    [HttpPost("verify-email"), AllowAnonymous, EnableRateLimiting("auth")]
     public async Task<IActionResult> VerifyEmail(VerifyEmailRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Token))
@@ -174,7 +174,7 @@ public sealed class AuthController(
         return Ok(new { message = "Xác thực email thành công. Bạn có thể đăng nhập ngay bây giờ." });
     }
 
-    [HttpPost("resend-verification"), AllowAnonymous]
+    [HttpPost("resend-verification"), AllowAnonymous, EnableRateLimiting("auth")]
     public async Task<IActionResult> ResendVerification(ResendVerificationRequest request, CancellationToken ct)
     {
         // Always return generic response to prevent user enumeration
@@ -208,7 +208,7 @@ public sealed class AuthController(
         return genericResponse;
     }
 
-    [HttpPost("login"), AllowAnonymous]
+    [HttpPost("login"), AllowAnonymous, EnableRateLimiting("auth")]
     public async Task<IActionResult> Login(LoginRequest request, CancellationToken ct)
     {
         var normalizedEmail = request.Email.Trim().ToUpperInvariant();
@@ -265,7 +265,7 @@ public sealed class AuthController(
         return Ok(tokens.CreateResponse(user, accessToken, accessExpires, rawRefreshToken));
     }
 
-    [HttpPost("refresh"), AllowAnonymous]
+    [HttpPost("refresh"), AllowAnonymous, EnableRateLimiting("auth")]
     public async Task<IActionResult> Refresh(RefreshTokenRequest request, CancellationToken ct)
     {
         var rawToken = request.RefreshToken;
@@ -307,7 +307,7 @@ public sealed class AuthController(
                 "Phát hiện dùng lại refresh token cũ. Đã thu hồi toàn bộ phiên trong family.",
                 ct);
 
-            Response.Cookies.Delete("refreshToken");
+            DeleteRefreshTokenCookie();
             return Unauthorized(new { message = "Phát hiện phiên đăng nhập bất thường. Toàn bộ phiên liên quan đã bị thu hồi." });
         }
 
@@ -351,7 +351,7 @@ public sealed class AuthController(
             await db.SaveChangesAsync(ct);
         }
 
-        Response.Cookies.Delete("refreshToken");
+        DeleteRefreshTokenCookie();
         return Ok(new { message = "Đăng xuất thành công." });
     }
 
@@ -365,7 +365,7 @@ public sealed class AuthController(
         foreach (var s in sessions) s.Revoke(clock.UtcNow);
         await db.SaveChangesAsync(ct);
 
-        Response.Cookies.Delete("refreshToken");
+        DeleteRefreshTokenCookie();
 
         await auditService.RecordAsync(
             UserId,
@@ -380,7 +380,7 @@ public sealed class AuthController(
         return Ok(new { message = "Đã thu hồi toàn bộ phiên đăng nhập thành công." });
     }
 
-    [HttpPost("forgot-password"), AllowAnonymous]
+    [HttpPost("forgot-password"), AllowAnonymous, EnableRateLimiting("auth")]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken ct)
     {
         // Non-enumerating response
@@ -414,7 +414,7 @@ public sealed class AuthController(
         return genericResponse;
     }
 
-    [HttpPost("reset-password"), AllowAnonymous]
+    [HttpPost("reset-password"), AllowAnonymous, EnableRateLimiting("auth")]
     public async Task<IActionResult> ResetPassword(ResetPasswordRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Token))
@@ -527,7 +527,16 @@ public sealed class AuthController(
             HttpOnly = true,
             Secure = !environment.IsDevelopment(),
             SameSite = SameSiteMode.Lax,
+            Path = "/api/auth",
             Expires = expires
+        });
+    }
+
+    private void DeleteRefreshTokenCookie()
+    {
+        Response.Cookies.Delete("refreshToken", new CookieOptions
+        {
+            Path = "/api/auth"
         });
     }
 }

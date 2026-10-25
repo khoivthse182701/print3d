@@ -6,6 +6,8 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using TheBoys.Application.Common.Interfaces;
 using TheBoys.Application.Generations.Commands.CreateGenerationTask;
 using TheBoys.Application.Generations.Commands.RecoverGenerationTask;
 using TheBoys.Application.Generations.Commands.ReviewGenerationTask;
@@ -35,7 +37,7 @@ public sealed class RecoverGenerationRequest
 }
 
 [ApiController, Route("api/generations"), Authorize]
-public sealed class GenerationsController(ISender mediator, IModelStorage storage) : ApiControllerBase
+public sealed class GenerationsController(ISender mediator, IModelStorage storage, IApplicationDbContext db) : ApiControllerBase
 {
     [HttpPost("image"), EnableRateLimiting("generation"), Consumes("multipart/form-data")]
     [RequestSizeLimit(17 * 1024 * 1024), RequestFormLimits(MultipartBodyLengthLimit = 17 * 1024 * 1024)]
@@ -58,23 +60,49 @@ public sealed class GenerationsController(ISender mediator, IModelStorage storag
         if (result.IsFailure) return ProblemResult(result.Error);
 
         var (task, isReplay) = result.Value;
+        var version = await db.ModelVersions.AsNoTracking()
+            .Include(v => v.Reviews)
+            .Where(v => v.SourceJobId == task.Id)
+            .OrderByDescending(v => v.VersionNo)
+            .FirstOrDefaultAsync(ct);
+
         return isReplay
-            ? Ok(View(task))
-            : AcceptedAtAction(nameof(Get), new { id = task.Id }, View(task));
+            ? Ok(View(task, version))
+            : AcceptedAtAction(nameof(Get), new { id = task.Id }, View(task, version));
     }
 
     [HttpGet]
-    public async Task<IActionResult> List([FromQuery, Range(1, 100000)] int page = 1, CancellationToken ct = default)
+    public async Task<IActionResult> List([FromQuery, Range(1, 100000)] int page = 1, [FromQuery] bool onlyMine = false, CancellationToken ct = default)
     {
-        var tasks = await mediator.Send(new GetGenerationTasksQuery(UserId, IsManagement, page), ct);
-        return Ok(tasks.Select(View));
+        var tasks = await mediator.Send(new GetGenerationTasksQuery(UserId, IsManagement, page, onlyMine), ct);
+        var taskIds = tasks.Select(t => t.Id).ToList();
+        var versions = await db.ModelVersions.AsNoTracking()
+            .Include(v => v.Reviews)
+            .Where(v => v.SourceJobId.HasValue && taskIds.Contains(v.SourceJobId.Value))
+            .ToListAsync(ct);
+
+        var versionLookup = versions
+            .GroupBy(v => v.SourceJobId!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderByDescending(v => v.VersionNo).First()
+            );
+
+        return Ok(tasks.Select(t => View(t, versionLookup.GetValueOrDefault(t.Id))));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> Get(Guid id, CancellationToken ct)
     {
         var result = await mediator.Send(new GetGenerationTaskByIdQuery(id, UserId, IsManagement), ct);
-        return result.IsFailure ? ProblemResult(result.Error) : Ok(View(result.Value));
+        if (result.IsFailure) return ProblemResult(result.Error);
+        var task = result.Value;
+        var version = await db.ModelVersions.AsNoTracking()
+            .Include(v => v.Reviews)
+            .Where(v => v.SourceJobId == task.Id)
+            .OrderByDescending(v => v.VersionNo)
+            .FirstOrDefaultAsync(ct);
+        return Ok(View(task, version));
     }
 
     [HttpGet("{id:guid}/quote")]
@@ -109,29 +137,85 @@ public sealed class GenerationsController(ISender mediator, IModelStorage storag
     public async Task<IActionResult> Review(Guid id, PrintReviewRequest request, CancellationToken ct)
     {
         var result = await mediator.Send(new ReviewGenerationTaskCommand(id, UserId, request.Approved, request.Note), ct);
-        return result.IsFailure ? ProblemResult(result.Error) : Ok(View(result.Value));
+        if (result.IsFailure) return ProblemResult(result.Error);
+        var task = result.Value;
+        var version = await db.ModelVersions.AsNoTracking()
+            .Include(v => v.Reviews)
+            .Where(v => v.SourceJobId == task.Id)
+            .OrderByDescending(v => v.VersionNo)
+            .FirstOrDefaultAsync(ct);
+        return Ok(View(task, version));
     }
 
     [HttpPost("{id:guid}/recover"), Authorize(Roles = Roles.Management)]
     public async Task<IActionResult> Recover(Guid id, RecoverGenerationRequest request, CancellationToken ct)
     {
         var result = await mediator.Send(new RecoverGenerationTaskCommand(id, request.ProviderTaskId), ct);
-        return result.IsFailure ? ProblemResult(result.Error) : Ok(View(result.Value));
+        if (result.IsFailure) return ProblemResult(result.Error);
+        var task = result.Value;
+        var version = await db.ModelVersions.AsNoTracking()
+            .Include(v => v.Reviews)
+            .Where(v => v.SourceJobId == task.Id)
+            .OrderByDescending(v => v.VersionNo)
+            .FirstOrDefaultAsync(ct);
+        return Ok(View(task, version));
     }
 
-    private object View(GenerationTask t) => new
+    private object View(GenerationTask t, ModelVersion? version = null)
     {
-        t.Id, t.UserId, t.ModelName, t.Status, t.Stage, t.Progress, t.RequestedHeightMm, t.ShouldTexture, t.AiModel,
-        t.ErrorMessage, t.CreatedAtUtc, t.CompletedAtUtc, t.DurationSeconds,
-        dimensions = new { widthMm = t.BoundingBoxX_Mm, depthMm = t.BoundingBoxY_Mm, heightMm = t.BoundingBoxZ_Mm },
-        modelVolumeCm3 = t.EstimatedVolumeCm3, t.PrintabilityStatus, t.IsWatertight,
-        printability = t.PrintabilityJson == null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(t.PrintabilityJson),
-        t.IsApprovedForPrinting, t.ReviewStatus, t.ReviewNote, t.ReviewedAtUtc,
-        imageUrl = $"/api/generations/{t.Id}/files/image",
-        glbUrl = t.StoragePathGlb == null ? null : $"/api/generations/{t.Id}/files/glb",
-        stlUrl = t.Status != GenerationStatus.Succeeded || t.StoragePathStl == null ? null : $"/api/generations/{t.Id}/files/stl",
-        providerTaskIds = !IsManagement ? null : new { generation = t.ProviderTaskId, resize = t.ResizeTaskId, convert = t.ConvertTaskId, analysis = t.AnalysisTaskId }
-    };
+        var latestReview = version?.Reviews?.OrderByDescending(r => r.CreatedAtUtc).FirstOrDefault();
+        object? latestPrintReview = null;
+        if (latestReview != null)
+        {
+            latestPrintReview = new
+            {
+                decision = latestReview.Decision,
+                configurationHash = Convert.ToHexString(latestReview.ConfigurationHash).ToLowerInvariant(),
+                createdAtUtc = latestReview.CreatedAtUtc
+            };
+        }
+        else if (version != null && (t.IsApprovedForPrinting || t.ReviewStatus == PrintReviewStatus.Approved || t.ReviewStatus == PrintReviewStatus.Rejected))
+        {
+            latestPrintReview = new
+            {
+                decision = t.IsApprovedForPrinting ? "Approved" : "Rejected",
+                configurationHash = version.GeometryHash.Length > 0 ? Convert.ToHexString(version.GeometryHash).ToLowerInvariant() : "",
+                createdAtUtc = t.ReviewedAtUtc ?? t.UpdatedAtUtc
+            };
+        }
+
+        return new
+        {
+            t.Id,
+            versionId = version?.Id,
+            latestPrintReview,
+            t.UserId,
+            t.ModelName,
+            t.Status,
+            t.Stage,
+            t.Progress,
+            t.RequestedHeightMm,
+            t.ShouldTexture,
+            t.AiModel,
+            t.ErrorMessage,
+            t.CreatedAtUtc,
+            t.CompletedAtUtc,
+            t.DurationSeconds,
+            dimensions = new { widthMm = t.BoundingBoxX_Mm, depthMm = t.BoundingBoxY_Mm, heightMm = t.BoundingBoxZ_Mm },
+            modelVolumeCm3 = t.EstimatedVolumeCm3,
+            t.PrintabilityStatus,
+            t.IsWatertight,
+            printability = t.PrintabilityJson == null ? (JsonElement?)null : JsonSerializer.Deserialize<JsonElement>(t.PrintabilityJson),
+            t.IsApprovedForPrinting,
+            t.ReviewStatus,
+            t.ReviewNote,
+            t.ReviewedAtUtc,
+            imageUrl = $"/api/generations/{t.Id}/files/image",
+            glbUrl = t.StoragePathGlb == null ? null : $"/api/generations/{t.Id}/files/glb",
+            stlUrl = t.Status != GenerationStatus.Succeeded || t.StoragePathStl == null ? null : $"/api/generations/{t.Id}/files/stl",
+            providerTaskIds = !IsManagement ? null : new { generation = t.ProviderTaskId, resize = t.ResizeTaskId, convert = t.ConvertTaskId, analysis = t.AnalysisTaskId }
+        };
+    }
 
     public static string? DetectImage(byte[] bytes)
     {

@@ -123,13 +123,29 @@ public sealed class PayOSPaymentGateway(
             var data = doc.RootElement.GetProperty("data");
             var checkoutUrl = data.TryGetProperty("checkoutUrl", out var urlProp) ? urlProp.GetString() : null;
             var paymentLinkId = data.TryGetProperty("paymentLinkId", out var linkProp) ? linkProp.GetString() : orderCode.ToString();
+            var qrCode = data.TryGetProperty("qrCode", out var qrProp) ? qrProp.GetString() : null;
+
+            var bin = data.TryGetProperty("bin", out var binProp) ? binProp.GetString() : null;
+            var accNo = data.TryGetProperty("accountNumber", out var accProp) ? accProp.GetString() : null;
+            var accName = data.TryGetProperty("accountName", out var nameProp) ? nameProp.GetString() : null;
+
+            string? finalQrUrl = null;
+            if (!string.IsNullOrWhiteSpace(bin) && !string.IsNullOrWhiteSpace(accNo))
+            {
+                finalQrUrl = $"https://img.vietqr.io/image/{bin}-{accNo}-compact2.png?amount={amount}&addInfo={Uri.EscapeDataString(description)}&accountName={Uri.EscapeDataString(accName ?? "")}";
+            }
+            else if (!string.IsNullOrWhiteSpace(qrCode))
+            {
+                finalQrUrl = $"https://api.qrserver.com/v1/create-qr-code/?size=350x350&data={Uri.EscapeDataString(qrCode)}";
+            }
 
             return new CreateCheckoutResult(
                 Success: true,
                 CheckoutUrl: checkoutUrl,
                 ProviderTransactionId: paymentLinkId,
                 ErrorCode: null,
-                ErrorMessage: null
+                ErrorMessage: null,
+                QrCode: finalQrUrl ?? qrCode
             );
         }
         catch (Exception ex)

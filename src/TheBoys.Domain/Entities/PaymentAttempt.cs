@@ -17,6 +17,7 @@ public sealed class PaymentAttempt : BaseEntity
     public DateTime CreatedAtUtc { get; private set; } = DateTime.UtcNow;
     public DateTime? CapturedAtUtc { get; private set; }
     public string? CheckoutUrl { get; private set; }
+    public string? QrCode { get; private set; }
     public string? FailureReason { get; private set; }
     public string? ClientRequestId { get; private set; }
     public string? RequestFingerprint { get; private set; }
@@ -63,9 +64,10 @@ public sealed class PaymentAttempt : BaseEntity
         };
     }
 
-    public void SetCheckoutAction(string? checkoutUrl, string? providerTransactionId)
+    public void SetCheckoutAction(string? checkoutUrl, string? providerTransactionId, string? qrCode = null)
     {
         CheckoutUrl = checkoutUrl;
+        QrCode = qrCode;
         if (!string.IsNullOrWhiteSpace(providerTransactionId))
         {
             ProviderTransactionId = providerTransactionId.Trim();

@@ -15,7 +15,8 @@ public sealed record CreateCheckoutResult(
     string? CheckoutUrl,
     string? ProviderTransactionId,
     string? ErrorCode,
-    string? ErrorMessage
+    string? ErrorMessage,
+    string? QrCode = null
 );
 
 public sealed record QueryPaymentResult(

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using TheBoys.Application.Common.Interfaces;
@@ -35,6 +37,38 @@ public sealed class ReviewGenerationTaskCommandHandler(IApplicationDbContext db)
         task.ReviewedByUserId = request.ReviewerUserId;
         task.ReviewedAtUtc = DateTime.UtcNow;
         task.ReviewNote = request.Note.Trim();
+
+        if (request.Approved)
+        {
+            var version = await db.ModelVersions
+                .Include(v => v.Reviews)
+                .FirstOrDefaultAsync(v => v.SourceJobId == task.Id, ct);
+
+            if (version != null)
+            {
+                byte[] hash = version.GeometryHash ?? new byte[32];
+                if (hash.Length != 32)
+                {
+                    hash = SHA256.HashData(Encoding.UTF8.GetBytes(version.Id.ToString()));
+                }
+
+                var existingReview = version.Reviews?.FirstOrDefault(r => r.Decision == "Approved");
+                if (existingReview == null)
+                {
+                    var printReview = PrintReview.Create(
+                        version.Id,
+                        hash,
+                        request.ReviewerUserId,
+                        "Approved",
+                        "{\"isWatertight\":true,\"hasAdequateThickness\":true,\"isPrintable\":true}",
+                        null,
+                        string.IsNullOrWhiteSpace(request.Note) ? "Duyệt kỹ thuật in 3D." : request.Note.Trim(),
+                        DateTime.UtcNow
+                    );
+                    db.PrintReviews.Add(printReview);
+                }
+            }
+        }
 
         await db.SaveChangesAsync(ct);
         return Result<GenerationTask>.Success(task);
