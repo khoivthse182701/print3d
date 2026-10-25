@@ -67,3 +67,12 @@ public sealed record OrderFulfillmentTimelineDto(
     List<DefectReportDto> DefectReports
 );
 
+public sealed record PartnerLabSummaryDto(
+    Guid Id,
+    string Name,
+    string ContactPhone,
+    string Address,
+    bool IsActive
+);
+
+

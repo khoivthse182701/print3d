@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TheBoys.Application.Defects.Commands.CreateDefectReport;
 using TheBoys.Application.Defects.Commands.ResolveDefectReport;
+using TheBoys.Application.Defects.Queries;
 using TheBoys.WebApi.Security;
 
 namespace TheBoys.WebApi.Controllers.v2;
@@ -21,6 +22,22 @@ public sealed record ResolveDefectReportApiRequest(
 [ApiController, Route("api/v2"), Authorize]
 public sealed class DefectReportsV2Controller(ISender mediator) : ApiControllerBase
 {
+    [HttpGet("defect-reports")]
+    [Authorize(Roles = Roles.Management)]
+    public async Task<IActionResult> GetDefectReports(
+        [FromQuery] string? status = null,
+        [FromQuery] Guid? orderId = null,
+        CancellationToken ct = default)
+    {
+        var result = await mediator.Send(new GetDefectReportsQuery(status, orderId), ct);
+        if (result.IsFailure)
+        {
+            return ProblemResult(result.Error);
+        }
+
+        return Ok(result.Value);
+    }
+
     [HttpPost("orders/{orderId:guid}/defect-reports")]
     public async Task<IActionResult> CreateDefectReport(
         Guid orderId,

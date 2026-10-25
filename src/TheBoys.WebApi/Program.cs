@@ -20,6 +20,7 @@ using TheBoys.WebApi;
 using TheBoys.WebApi.Security;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddControllers().AddJsonOptions(options =>

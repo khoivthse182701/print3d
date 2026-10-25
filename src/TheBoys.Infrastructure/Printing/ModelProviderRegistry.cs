@@ -28,7 +28,8 @@ public sealed class ModelProviderRegistry : IModelProviderRegistry
             [hunyuan.Name] = hunyuan,
             ["Hunyuan"] = hunyuan,
             ["Tencent"] = hunyuan,
-            ["hy3d"] = hunyuan
+            ["hy3d"] = hunyuan,
+            ["pro"] = hunyuan
         };
         if (!string.IsNullOrWhiteSpace(hunyuan.Model) && !_providers.ContainsKey(hunyuan.Model))
         {

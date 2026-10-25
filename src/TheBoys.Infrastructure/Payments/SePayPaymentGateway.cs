@@ -156,12 +156,13 @@ public sealed class SePayPaymentGateway(
             if (!string.IsNullOrWhiteSpace(content))
             {
                 var prefix = _sePayOptions.InvoicePrefix;
-                var words = content.Split([' ', ',', '.', '-', '_', ':'], StringSplitOptions.RemoveEmptyEntries);
+                var words = content.Split([' ', '\t', '\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries);
                 foreach (var w in words)
                 {
-                    if (w.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || w.Length >= 8)
+                    var cleaned = w.Trim().TrimEnd('.', ',');
+                    if (cleaned.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || cleaned.Length >= 8)
                     {
-                        merchantReference = w;
+                        merchantReference = cleaned;
                         break;
                     }
                 }

@@ -1,4 +1,4 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TheBoys.Application.Fulfillment.Commands.AssignOrderToPartner;
@@ -8,6 +8,7 @@ using TheBoys.Application.Fulfillment.Commands.RecordShipmentEvent;
 using TheBoys.Application.Fulfillment.Commands.RespondPartnerAssignment;
 using TheBoys.Application.Fulfillment.Commands.StartProductionRun;
 using TheBoys.Application.Fulfillment.Commands.UpdateProductionRunProgress;
+using TheBoys.Application.Fulfillment.Queries.GetActivePartnerLabs;
 using TheBoys.Application.Fulfillment.Queries.GetOrderFulfillmentTimeline;
 using TheBoys.Domain.Enums;
 using TheBoys.WebApi.Security;
@@ -65,24 +66,15 @@ public sealed class FulfillmentV2Controller(ISender mediator) : ApiControllerBas
 {
     [HttpGet("partner-labs")]
     [Authorize(Roles = Roles.Management)]
-    public async Task<IActionResult> GetPartnerLabs(
-        [FromServices] IApplicationDbContext db,
-        CancellationToken ct)
+    public async Task<IActionResult> GetPartnerLabs(CancellationToken ct)
     {
-        var labs = await db.PartnerLabs.AsNoTracking()
-            .Where(l => l.IsActive)
-            .OrderBy(l => l.LabName)
-            .Select(l => new
-            {
-                id = l.Id,
-                name = l.LabName,
-                contactPhone = l.PhoneNumber,
-                address = l.Address,
-                isActive = l.IsActive
-            })
-            .ToListAsync(ct);
+        var result = await mediator.Send(new GetActivePartnerLabsQuery(), ct);
+        if (result.IsFailure)
+        {
+            return ProblemResult(result.Error);
+        }
 
-        return Ok(labs);
+        return Ok(result.Value);
     }
     [HttpPost("orders/{orderId:guid}/assignments")]
     [Authorize(Roles = Roles.Management)]
