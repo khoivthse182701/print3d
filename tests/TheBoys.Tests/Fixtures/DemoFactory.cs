@@ -27,6 +27,7 @@ public sealed class DemoFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public Guid OtherId { get; private set; }
     public Guid StaffId { get; private set; }
     public Guid AdminId { get; private set; }
+    public Guid ManagerId { get; private set; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -61,11 +62,12 @@ public sealed class DemoFactory : WebApplicationFactory<Program>, IAsyncLifetime
             new User { Email = "customer@example.test", FullName = "Customer", Role = UserRole.Customer },
             new User { Email = "other@example.test", FullName = "Other", Role = UserRole.Customer },
             new User { Email = "staff@example.test", FullName = "Staff", Role = UserRole.Staff },
-            new User { Email = "admin@example.test", FullName = "Admin", Role = UserRole.Admin }
+            new User { Email = "admin@example.test", FullName = "Admin", Role = UserRole.Admin },
+            new User { Email = "manager@example.test", FullName = "Manager", Role = UserRole.Manager }
         };
         foreach (var user in users) user.PasswordHash = hasher.HashPassword(user, "Test-password-123!");
         db.Users.AddRange(users); await db.SaveChangesAsync();
-        CustomerId = users[0].Id; OtherId = users[1].Id; StaffId = users[2].Id; AdminId = users[3].Id;
+        CustomerId = users[0].Id; OtherId = users[1].Id; StaffId = users[2].Id; AdminId = users[3].Id; ManagerId = users[4].Id;
     }
 
     public async Task<HttpClient> Client(Guid id)
