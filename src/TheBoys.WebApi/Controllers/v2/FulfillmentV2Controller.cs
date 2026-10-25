@@ -1,4 +1,4 @@
-using MediatR;
+﻿using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TheBoys.Application.Fulfillment.Commands.AssignOrderToPartner;
@@ -11,6 +11,8 @@ using TheBoys.Application.Fulfillment.Commands.UpdateProductionRunProgress;
 using TheBoys.Application.Fulfillment.Queries.GetOrderFulfillmentTimeline;
 using TheBoys.Domain.Enums;
 using TheBoys.WebApi.Security;
+using Microsoft.EntityFrameworkCore;
+using TheBoys.Application.Common.Interfaces;
 
 namespace TheBoys.WebApi.Controllers.v2;
 
@@ -61,6 +63,27 @@ public sealed record RecordShipmentEventApiRequest(
 [ApiController, Route("api/v2"), Authorize]
 public sealed class FulfillmentV2Controller(ISender mediator) : ApiControllerBase
 {
+    [HttpGet("partner-labs")]
+    [Authorize(Roles = Roles.Management)]
+    public async Task<IActionResult> GetPartnerLabs(
+        [FromServices] IApplicationDbContext db,
+        CancellationToken ct)
+    {
+        var labs = await db.PartnerLabs.AsNoTracking()
+            .Where(l => l.IsActive)
+            .OrderBy(l => l.LabName)
+            .Select(l => new
+            {
+                id = l.Id,
+                name = l.LabName,
+                contactPhone = l.PhoneNumber,
+                address = l.Address,
+                isActive = l.IsActive
+            })
+            .ToListAsync(ct);
+
+        return Ok(labs);
+    }
     [HttpPost("orders/{orderId:guid}/assignments")]
     [Authorize(Roles = Roles.Management)]
     public async Task<IActionResult> AssignOrder(
