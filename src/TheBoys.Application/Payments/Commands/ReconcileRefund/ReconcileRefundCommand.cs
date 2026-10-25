@@ -57,10 +57,16 @@ public sealed class ReconcileRefundCommandHandler(
 
         var queryResult = await gateway.QueryRefundAsync(attempt.MerchantReference, refund.OperationKey, ct);
 
-        if (queryResult.Success && string.Equals(queryResult.Status, "Succeeded", StringComparison.OrdinalIgnoreCase))
+        // Với cổng thanh toán thủ công/chuyển khoản VietQR (như PayOS/SePay không có API rút tiền tự động),
+        // thao tác bấm 'Xác nhận Đối Soát' của Staff/Admin chính là sự xác nhận đã chuyển khoản hoàn tiền thủ công thành công.
+        var isOfflineManualGateway = string.Equals(queryResult.RawStatus, "OFFLINE_QUERY_UNSUPPORTED", StringComparison.OrdinalIgnoreCase);
+        var isConfirmedSucceeded = (queryResult.Success && string.Equals(queryResult.Status, "Succeeded", StringComparison.OrdinalIgnoreCase))
+            || isOfflineManualGateway;
+
+        if (isConfirmedSucceeded)
         {
             refund.MarkSucceeded(
-                queryResult.ProviderReference ?? $"RECONCILED-REF-{refund.OperationKey:N}",
+                queryResult.ProviderReference ?? $"MANUAL-REF-{now:yyyyMMdd}-{refund.OperationKey.ToString("N")[..8].ToUpperInvariant()}",
                 queryResult.CompletedAtUtc ?? now,
                 command.ReconciledByUserId
             );
