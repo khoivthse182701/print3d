@@ -161,40 +161,25 @@ public sealed class OrdersV2Controller(ISender mediator, IApplicationDbContext d
         [FromBody] CancelOrderV2ApiRequest request,
         CancellationToken ct)
     {
-        var isManagement = IsManagement;
+        var isManager = User.IsInRole(Roles.Manager);
+        var canApproveRefund = (User.IsInRole(Roles.Staff) || User.IsInRole(Roles.Admin)) && !isManager;
 
-        if (User.IsInRole(Roles.Manager))
-        {
-            var targetOrder = await db.Orders
-                .AsNoTracking()
-                .Select(o => new { o.Id, o.UserId, o.OrderPaymentStatus })
-                .SingleOrDefaultAsync(o => o.Id == id, ct);
-
-            if (targetOrder != null)
-            {
-                var isUnpaid = string.Equals(targetOrder.OrderPaymentStatus, "Unpaid", StringComparison.OrdinalIgnoreCase);
-                if (targetOrder.UserId != UserId)
-                {
-                    if (!isUnpaid)
-                    {
-                        return Forbid();
-                    }
-                }
-                else
-                {
-                    if (!isUnpaid)
-                    {
-                        isManagement = false;
-                    }
-                }
-            }
-        }
-
-        var command = new CancelOrderV2Command(id, UserId, request.Reason, isManagement, request.DecisionNote);
+        var command = new CancelOrderV2Command(
+            OrderId: id,
+            UserId: UserId,
+            Reason: request.Reason,
+            IsManagement: IsManagement,
+            DecisionNote: request.DecisionNote,
+            CanApproveRefund: canApproveRefund
+        );
         var result = await mediator.Send(command, ct);
 
         if (result.IsFailure)
         {
+            if (result.Error.Code == "Forbidden")
+            {
+                return Forbid();
+            }
             return ProblemResult(result.Error);
         }
 
@@ -208,7 +193,10 @@ public sealed class OrdersV2Controller(ISender mediator, IApplicationDbContext d
         [FromBody] ReviewCancellationRequestApiRequest request,
         CancellationToken ct)
     {
-        if (User.IsInRole(Roles.Manager) && request.Approved)
+        var isManager = User.IsInRole(Roles.Manager);
+        var canApproveRefund = (User.IsInRole(Roles.Staff) || User.IsInRole(Roles.Admin)) && !isManager;
+
+        if (isManager && request.Approved)
         {
             return Forbid();
         }
@@ -217,12 +205,17 @@ public sealed class OrdersV2Controller(ISender mediator, IApplicationDbContext d
             RequestId: requestId,
             DecidedByUserId: UserId,
             Approved: request.Approved,
-            DecisionNote: request.DecisionNote
+            DecisionNote: request.DecisionNote,
+            CanApproveRefund: canApproveRefund
         );
 
         var result = await mediator.Send(command, ct);
         if (result.IsFailure)
         {
+            if (result.Error.Code == "Forbidden")
+            {
+                return Forbid();
+            }
             return ProblemResult(result.Error);
         }
 

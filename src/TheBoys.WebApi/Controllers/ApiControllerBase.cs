@@ -16,6 +16,7 @@ public abstract class ApiControllerBase : ControllerBase
         TheBoys.Application.Common.Models.ErrorType.NotFound => string.IsNullOrEmpty(error.Message) ? NotFound() : NotFound(new { message = error.Message }),
         TheBoys.Application.Common.Models.ErrorType.Conflict when error.Extra != null => Conflict(new { message = error.Message, quote = error.Extra }),
         TheBoys.Application.Common.Models.ErrorType.Conflict => Conflict(new { message = error.Message }),
+        TheBoys.Application.Common.Models.ErrorType.Unauthorized when error.Code == "Forbidden" => Forbid(),
         TheBoys.Application.Common.Models.ErrorType.Unauthorized => Unauthorized(new { message = error.Message }),
         TheBoys.Application.Common.Models.ErrorType.PaymentRequired => StatusCode(StatusCodes.Status402PaymentRequired, new { message = error.Message }),
         TheBoys.Application.Common.Models.ErrorType.ServiceUnavailable => StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = error.Message }),

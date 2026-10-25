@@ -1,5 +1,11 @@
+using System.Reflection;
+using System.Security.Claims;
+using MediatR;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using TheBoys.Application.Defects.DTOs;
 using TheBoys.Application.Payments.DTOs;
+using TheBoys.WebApi.Controllers.v2;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Net.Http.Headers;
@@ -972,6 +978,97 @@ public class ManagerRoleFlowTests(DemoFactory factory) : IClassFixture<DemoFacto
             Assert.Equal("Cancelled", dbOrder.FulfillmentStatus);
             Assert.Equal(OrderStatus.Cancelled, dbOrder.Status);
         }
+
+        // SCENARIO 6: Deterministic race condition interleaving regression
+        // Payment commits after controller dispatch and before handler reads SQL
+        Order raceOrder;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            raceOrder = new Order
+            {
+                Id = Guid.NewGuid(),
+                OrderCode = $"TB-RC-{Guid.NewGuid():N}",
+                UserId = factory.CustomerId,
+                QuoteId = null,
+                PricingPackageId = DatabaseInitializer.DemoPackageId,
+                Status = OrderStatus.Draft,
+                FulfillmentStatus = "PendingPayment",
+                OrderPaymentStatus = "Unpaid",
+                Currency = "VND",
+                Quantity = 1,
+                UnitPriceSnapshot = testAmount,
+                PartnerCostSnapshot = 120000m,
+                SubTotalVnd = testAmount,
+                ShippingFeeRaw = 0,
+                FinalShippingFee = 0,
+                TotalAmount = testAmount,
+                ReceiverName = "Race Customer",
+                ReceiverPhone = "0901234567",
+                StreetAddress = "123 Le Loi",
+                District = "District 1",
+                City = "Ho Chi Minh",
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            db.Orders.Add(raceOrder);
+            await db.SaveChangesAsync();
+        }
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var sender = DispatchProxy.Create<ISender, PaymentInterleavingProxy>();
+            var proxy = (PaymentInterleavingProxy)(object)sender;
+            proxy.Inner = scope.ServiceProvider.GetRequiredService<ISender>();
+            proxy.Db = db;
+            proxy.OrderId = raceOrder.Id;
+
+            var controller = new OrdersV2Controller(sender, db)
+            {
+                ControllerContext = new ControllerContext
+                {
+                    HttpContext = new DefaultHttpContext
+                    {
+                        User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+                        {
+                            new Claim(ClaimTypes.NameIdentifier, factory.ManagerId.ToString()),
+                            new Claim("sub", factory.ManagerId.ToString()),
+                            new Claim(ClaimTypes.Role, Roles.Manager),
+                            new Claim("role", Roles.Manager)
+                        }, "test"))
+                    }
+                }
+            };
+
+            var cancelActionRes = await controller.Cancel(raceOrder.Id, new CancelOrderV2ApiRequest
+            {
+                Reason = "Manager attempting race cancellation",
+                DecisionNote = "Race attempt"
+            }, CancellationToken.None);
+
+            Assert.IsType<ForbidResult>(cancelActionRes);
+            Assert.True(proxy.DidInterleave, "Interleaving proxy should have committed payment before handler execution");
+
+            db.ChangeTracker.Clear();
+            var persisted = await db.Orders.AsNoTracking().SingleAsync(o => o.Id == raceOrder.Id);
+            Assert.Equal("Paid", persisted.OrderPaymentStatus);
+            Assert.Equal("AwaitingProduction", persisted.FulfillmentStatus);
+            Assert.NotEqual(OrderStatus.Cancelled, persisted.Status);
+
+            var approvedRequests = await db.OrderCancellationRequests.AsNoTracking()
+                .CountAsync(c => c.OrderId == raceOrder.Id && c.Status == CancellationRequestStatus.Approved);
+            Assert.Equal(0, approvedRequests);
+
+            var paymentHistories = await db.OrderStatusHistories.AsNoTracking()
+                .Where(h => h.OrderId == raceOrder.Id && h.Axis == "Payment")
+                .ToListAsync();
+            Assert.Empty(paymentHistories);
+
+            var cancelOutbox = await db.OutboxMessages.AsNoTracking()
+                .Where(m => m.AggregateId == raceOrder.Id && (m.EventType == "OrderCancelled" || m.EventType == "OrderCancellationApproved"))
+                .ToListAsync();
+            Assert.Empty(cancelOutbox);
+        }
     }
 
     private async Task<Guid> NewCustomer(int credits = 10)
@@ -1027,5 +1124,25 @@ public class ManagerRoleFlowTests(DemoFactory factory) : IClassFixture<DemoFacto
         var body = await response.Content.ReadAsStringAsync();
         Assert.True(response.IsSuccessStatusCode, $"HTTP {(int)response.StatusCode}: {body}");
         return JsonSerializer.Deserialize<JsonElement>(body);
+    }
+}
+
+public class PaymentInterleavingProxy : DispatchProxy
+{
+    public ISender Inner = null!;
+    public ApplicationDbContext Db = null!;
+    public Guid OrderId;
+    public bool DidInterleave;
+
+    protected override object? Invoke(MethodInfo? method, object?[]? args)
+    {
+        if (args?.FirstOrDefault() is TheBoys.Application.Orders.Commands.CancelOrderV2.CancelOrderV2Command)
+        {
+            Db.Orders.Where(o => o.Id == OrderId).ExecuteUpdate(s =>
+                s.SetProperty(o => o.OrderPaymentStatus, "Paid")
+                 .SetProperty(o => o.FulfillmentStatus, "AwaitingProduction"));
+            DidInterleave = true;
+        }
+        return method!.Invoke(Inner, args);
     }
 }
