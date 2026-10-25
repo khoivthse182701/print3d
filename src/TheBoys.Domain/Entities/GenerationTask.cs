@@ -19,7 +19,7 @@ public sealed class GenerationTask : BaseAuditableEntity
     public int RequestedHeightMm { get; set; } = 100;
     public string PrinterType { get; set; } = "sla";
     public int Progress { get; set; }
-    public GenerationStage Stage { get; set; }
+    public TheBoys.Domain.Enums.GenerationStage Stage { get; set; }
     public string? ResizeTaskId { get; set; }
     public string? ConvertTaskId { get; set; }
     public string? AnalysisTaskId { get; set; }

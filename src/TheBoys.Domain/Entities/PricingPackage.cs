@@ -33,4 +33,5 @@ public sealed class PartnerLab : BaseEntity
     // Navigation
     public User? User { get; set; }
     public ICollection<Order> Orders { get; set; } = new List<Order>();
+    public ICollection<PartnerAssignment> PartnerAssignments { get; set; } = new List<PartnerAssignment>();
 }
