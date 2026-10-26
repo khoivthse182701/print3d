@@ -25,11 +25,16 @@ public class RateLimitingAndProxyTests(DemoFactory factory) : IClassFixture<Demo
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     ["RateLimitingSettings:AuthPermitLimit"] = "10",
+                    ["RateLimitingSettings:AuthWindowSeconds"] = "60",
                     ["AiProviders:Meshy:ApiKey"] = "",
                     ["AiProviders:Tripo:ApiKey"] = "",
                     ["AiProviders:Hunyuan:SecretId"] = "",
                     ["AiProviders:Hunyuan:SecretKey"] = "",
-                    ["ModelStorage:BasePath"] = factory.Storage.ResolvePath("health")
+                    ["ModelStorage:BasePath"] = factory.Storage.ResolvePath("health"),
+                    ["Database:InitializeOnStartup"] = "false",
+                    ["BootstrapAdmin:Email"] = "",
+                    ["BootstrapAdmin:Password"] = "",
+                    ["JwtSettings:Secret"] = "test-only-secret-not-for-real-use-0123456789"
                 });
                 configureConfig?.Invoke(config);
             });
