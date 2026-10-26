@@ -217,7 +217,7 @@ public sealed class GenerationProcessor(
 
         var targetHeight = task.RequestedHeightMm > 0 ? task.RequestedHeightMm : 100;
         var heightM = targetHeight / 1000f;
-        var glbBytes = GlbToStlConverter.CreateCubeGlb(heightM * 0.6f, heightM * 0.4f, heightM);
+        var glbBytes = GlbToStlConverter.CreateCubeGlb(heightM * 0.75f, heightM, heightM * 0.45f);
 
         task.StoragePathGlb = storage.ModelKey(task.Id, "glb");
         var glbPath = storage.ResolvePath(task.StoragePathGlb);
