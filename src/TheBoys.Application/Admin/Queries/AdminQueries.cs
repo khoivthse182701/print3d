@@ -22,15 +22,18 @@ public sealed class GetUsersQueryHandler(IApplicationDbContext db) : IRequestHan
     }
 }
 
-public sealed record GetActivePricingPackagesQuery : IRequest<IReadOnlyList<PricingPackage>>;
+public sealed record GetActivePricingPackagesQuery(bool IncludeInactive = false) : IRequest<IReadOnlyList<PricingPackage>>;
 
 public sealed class GetActivePricingPackagesQueryHandler(IApplicationDbContext db)
     : IRequestHandler<GetActivePricingPackagesQuery, IReadOnlyList<PricingPackage>>
 {
     public async Task<IReadOnlyList<PricingPackage>> Handle(GetActivePricingPackagesQuery request, CancellationToken ct)
     {
-        return await db.PricingPackages.AsNoTracking()
-            .Where(x => x.IsActive)
-            .ToListAsync(ct);
+        var query = db.PricingPackages.AsNoTracking();
+        if (!request.IncludeInactive)
+        {
+            query = query.Where(x => x.IsActive);
+        }
+        return await query.ToListAsync(ct);
     }
 }

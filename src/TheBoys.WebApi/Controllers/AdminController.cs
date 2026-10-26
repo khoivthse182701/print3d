@@ -114,6 +114,13 @@ public sealed class AdminController(ISender mediator) : ApiControllerBase
             : Ok(new { message = "Đã mở khóa tài khoản thành công.", targetUserId = id });
     }
 
+    [HttpGet("pricing-packages")]
+    public async Task<IActionResult> GetAllPackages(CancellationToken ct)
+    {
+        var packages = await mediator.Send(new GetActivePricingPackagesQuery(true), ct);
+        return Ok(packages.Select(x => new { x.Id, x.Name, x.Material, x.PriceVnd, x.MinHeightMm, x.MaxHeightMm, x.HeightRangeCm, x.IsActive }));
+    }
+
     [HttpPatch("pricing-packages/{id:guid}")]
     public async Task<IActionResult> UpdatePrice(Guid id, PackagePriceRequest request, CancellationToken ct)
     {
@@ -128,9 +135,9 @@ public sealed class AdminController(ISender mediator) : ApiControllerBase
 public sealed class PricingPackagesController(ISender mediator) : ControllerBase
 {
     [HttpGet, AllowAnonymous]
-    public async Task<IActionResult> Get(CancellationToken ct)
+    public async Task<IActionResult> Get([FromQuery] bool includeInactive = false, CancellationToken ct = default)
     {
-        var packages = await mediator.Send(new GetActivePricingPackagesQuery(), ct);
-        return Ok(packages.Select(x => new { x.Id, x.Name, x.Material, x.PriceVnd, x.MinHeightMm, x.MaxHeightMm, x.HeightRangeCm }));
+        var packages = await mediator.Send(new GetActivePricingPackagesQuery(includeInactive), ct);
+        return Ok(packages.Select(x => new { x.Id, x.Name, x.Material, x.PriceVnd, x.MinHeightMm, x.MaxHeightMm, x.HeightRangeCm, x.IsActive }));
     }
 }
