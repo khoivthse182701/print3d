@@ -54,6 +54,30 @@ public static class DatabaseInitializer
             admin.CreditAccount = CreditAccount.Create(admin.Id, 2, 0);
             db.Users.Add(admin);
         }
+
+        // Seed development standard users for automated testing and local verification
+        if (configuration.GetValue<bool>("Database:InitializeOnStartup") || configuration.GetValue<bool>("SeedDevUsers"))
+        {
+            var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>();
+            var devUsers = new[]
+            {
+                new User { Email = "admin@123", NormalizedEmail = "ADMIN@123", FullName = "Quản Trị Viên", Role = UserRole.Admin, AccountStatus = AccountStatus.Active, EmailVerifiedAtUtc = DateTime.UtcNow },
+                new User { Email = "customer@123", NormalizedEmail = "CUSTOMER@123", FullName = "Khách Hàng Mẫu", Role = UserRole.Customer, AccountStatus = AccountStatus.Active, EmailVerifiedAtUtc = DateTime.UtcNow },
+                new User { Email = "staff@123", NormalizedEmail = "STAFF@123", FullName = "Nhân Viên Vận Hành", Role = UserRole.Staff, AccountStatus = AccountStatus.Active, EmailVerifiedAtUtc = DateTime.UtcNow },
+                new User { Email = "manager@123", NormalizedEmail = "MANAGER@123", FullName = "Quản Lý Vận Hành", Role = UserRole.Manager, AccountStatus = AccountStatus.Active, EmailVerifiedAtUtc = DateTime.UtcNow }
+            };
+
+            foreach (var devUser in devUsers)
+            {
+                if (!await db.Users.IgnoreQueryFilters().AnyAsync(x => x.Email == devUser.Email))
+                {
+                    devUser.PasswordHash = hasher.HashPassword(devUser, "Admin@123456");
+                    devUser.CreditAccount = CreditAccount.Create(devUser.Id, 10, 0);
+                    db.Users.Add(devUser);
+                }
+            }
+        }
+
         await db.SaveChangesAsync();
     }
 }
