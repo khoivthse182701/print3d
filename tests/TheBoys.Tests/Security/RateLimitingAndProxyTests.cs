@@ -2,41 +2,41 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using TheBoys.Application.Printing;
 using TheBoys.Infrastructure.Persistence;
-using TheBoys.Infrastructure.Printing;
 using TheBoys.WebApi;
 
 namespace TheBoys.Tests;
 
-public class RateLimitingAndProxyTests
+public class RateLimitingAndProxyTests(DemoFactory factory) : IClassFixture<DemoFactory>
 {
-    private static WebApplicationFactory<Program> CreateIsolatedFactory(Action<IConfigurationBuilder>? configureConfig = null)
+    private WebApplicationFactory<Program> CreateIsolatedFactory(
+        Action<IConfigurationBuilder>? configureConfig = null,
+        Action<IServiceCollection>? configureServices = null)
     {
-        return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        return factory.WithWebHostBuilder(builder =>
         {
-            builder.UseEnvironment("Development");
             builder.ConfigureAppConfiguration((_, config) =>
             {
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Database:InitializeOnStartup"] = "false",
-                    ["BootstrapAdmin:Email"] = "",
-                    ["BootstrapAdmin:Password"] = "",
-                    ["JwtSettings:Secret"] = "test-only-secret-not-for-real-use-0123456789"
+                    ["RateLimitingSettings:AuthPermitLimit"] = "10",
+                    ["AiProviders:Meshy:ApiKey"] = "",
+                    ["AiProviders:Tripo:ApiKey"] = "",
+                    ["AiProviders:Hunyuan:SecretId"] = "",
+                    ["AiProviders:Hunyuan:SecretKey"] = "",
+                    ["ModelStorage:BasePath"] = factory.Storage.ResolvePath("health")
                 });
                 configureConfig?.Invoke(config);
             });
-            builder.ConfigureServices(services =>
+            if (configureServices != null)
             {
-                services.RemoveAll<IModelGenerationProvider>();
-                services.AddSingleton<IModelGenerationProvider>(new FakeProvider());
-                services.RemoveAll<IModelStorage>();
-                services.AddSingleton<IModelStorage>(new TestStorage());
-            });
+                builder.ConfigureServices(configureServices);
+            }
         });
     }
 
@@ -124,10 +124,50 @@ public class RateLimitingAndProxyTests
     {
         await using var isolatedFactory = CreateIsolatedFactory();
         using var client = isolatedFactory.CreateClient();
-        var response = await client.GetAsync("/health");
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var content = await response.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
-        Assert.Equal("ok", content.GetProperty("status").GetString());
+        // Liveness probe returns 200 OK without external service dependencies
+        var liveResponse = await client.GetAsync("/health/live");
+        Assert.Equal(HttpStatusCode.OK, liveResponse.StatusCode);
+        var liveContent = await liveResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        Assert.Equal("live", liveContent.GetProperty("status").GetString());
+
+        // Readiness probe returns 200 OK because test dependencies (DB, storage) are provisioned,
+        // and reports unconfigured AI provider keys truthfully without crashing.
+        var readyResponse = await client.GetAsync("/health");
+        Assert.Equal(HttpStatusCode.OK, readyResponse.StatusCode);
+
+        var readyContent = await readyResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        Assert.Equal("ok", readyContent.GetProperty("status").GetString());
+        Assert.Equal("ready", readyContent.GetProperty("readiness").GetString());
+        Assert.True(readyContent.GetProperty("checks").GetProperty("database").GetProperty("healthy").GetBoolean());
+        Assert.True(readyContent.GetProperty("checks").GetProperty("storage").GetProperty("healthy").GetBoolean());
+        Assert.False(readyContent.GetProperty("checks").GetProperty("aiProviders").GetProperty("meshy").GetProperty("configured").GetBoolean());
+        Assert.False(readyContent.GetProperty("checks").GetProperty("aiProviders").GetProperty("tripo").GetProperty("configured").GetBoolean());
+    }
+
+    [Fact]
+    public async Task HealthEndpoint_WhenDatabaseUnreachable_ReturnsServiceUnavailable()
+    {
+        await using var unreachableDbFactory = CreateIsolatedFactory(configureServices: services =>
+        {
+            services.RemoveAll<DbContextOptions<ApplicationDbContext>>();
+            services.RemoveAll<IDbContextOptionsConfiguration<ApplicationDbContext>>();
+            var unreachableConn = "Server=(localdb)\\MSSQLLocalDB;Database=TheBoys_Unreachable_" + Guid.NewGuid().ToString("N") + ";Connect Timeout=1;Trusted_Connection=True;TrustServerCertificate=True";
+            services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(unreachableConn));
+        });
+        using var client = unreachableDbFactory.CreateClient();
+
+        // Liveness probe remains operational even when database is unreachable
+        var liveResponse = await client.GetAsync("/health/live");
+        Assert.Equal(HttpStatusCode.OK, liveResponse.StatusCode);
+
+        // Readiness probe fails cleanly with 503 Service Unavailable
+        var readyResponse = await client.GetAsync("/health");
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, readyResponse.StatusCode);
+
+        var readyContent = await readyResponse.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+        Assert.Equal("unhealthy", readyContent.GetProperty("status").GetString());
+        Assert.Equal("unhealthy", readyContent.GetProperty("readiness").GetString());
+        Assert.False(readyContent.GetProperty("checks").GetProperty("database").GetProperty("healthy").GetBoolean());
     }
 }
