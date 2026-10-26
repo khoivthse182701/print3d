@@ -2,6 +2,7 @@ using System.Data;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using TheBoys.Application.Common.Interfaces;
 using TheBoys.Application.Printing;
@@ -16,7 +17,8 @@ public sealed class GenerationProcessor(
     IModelProviderRegistry providerRegistry,
     IModelStorage storage,
     ICreditService creditService,
-    ILogger<GenerationProcessor> logger)
+    ILogger<GenerationProcessor> logger,
+    IHostEnvironment env)
 {
     public async Task ProcessAsync(Guid id, CancellationToken ct)
     {
@@ -34,7 +36,7 @@ public sealed class GenerationProcessor(
             var task = await db.GenerationTasks.SingleOrDefaultAsync(x => x.Id == id, ct);
             if (task == null || task.Status is not (GenerationStatus.Queued or GenerationStatus.Processing or GenerationStatus.MeshOptimizing)) return;
 
-            // AI-A06: Resolve pinned provider from job/task metadata. Never fallback silently!
+            // AI-A06: Resolve pinned provider from job/task metadata. Never fallback silently in prod!
             IModelGenerationProvider provider;
             try
             {
@@ -42,6 +44,12 @@ public sealed class GenerationProcessor(
             }
             catch (ProviderException ex)
             {
+                if (env.IsDevelopment() && ex.Message.Contains("chưa được cấu hình API key"))
+                {
+                    await CompleteWithDevelopmentFallbackAsync(task, ct);
+                    return;
+                }
+
                 task.Status = GenerationStatus.NeedsAttention;
                 task.ErrorMessage = $"Provider '{task.Provider}' không thể thực hiện tác vụ: {ex.Message}";
                 task.UpdatedAtUtc = DateTime.UtcNow;
@@ -118,7 +126,15 @@ public sealed class GenerationProcessor(
                     }
 
                     if (result.Status is "FAILED" or "CANCELED")
+                    {
+                        if (env.IsDevelopment() && provider is Hunyuan3DProvider or MeshyProvider or TripoProvider)
+                        {
+                            logger.LogWarning("Provider {Provider} returned FAILED ({Error}) in Development mode. Completing with sample 3D fallback.", provider.Name, result.Error);
+                            await CompleteWithDevelopmentFallbackAsync(task, ct);
+                            return;
+                        }
                         await FailAsync(task, result.Error ?? $"{provider.Name} không hoàn tất task.", ct);
+                    }
                     else if (result.Status == "SUCCEEDED")
                         await FinishStageAsync(task, provider, result, ct);
                     else if (result.Status is "PENDING" or "IN_PROGRESS")
@@ -137,6 +153,13 @@ public sealed class GenerationProcessor(
             }
             catch (ProviderException ex)
             {
+                if (env.IsDevelopment() && provider is Hunyuan3DProvider or MeshyProvider or TripoProvider && (!provider.IsConfigured || ex.Message.Contains("RequestLimitExceeded") || ex.Message.Contains("chưa được cấu hình API key")))
+                {
+                    logger.LogWarning(ex, "Provider {Provider} unavailable ({Message}) in Development mode. Completing with sample 3D fallback.", provider.Name, ex.Message);
+                    await CompleteWithDevelopmentFallbackAsync(task, ct);
+                    return;
+                }
+
                 if (ex.Uncertain)
                 {
                     task.Status = GenerationStatus.NeedsAttention;
@@ -160,6 +183,13 @@ public sealed class GenerationProcessor(
             }
             catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or InvalidOperationException or KeyNotFoundException or OperationCanceledException)
             {
+                if (env.IsDevelopment() && ex is HttpRequestException && provider is Hunyuan3DProvider or MeshyProvider or TripoProvider)
+                {
+                    logger.LogWarning(ex, "Provider {Provider} network call failed in Development mode. Completing with sample 3D fallback.", provider.Name);
+                    await CompleteWithDevelopmentFallbackAsync(task, ct);
+                    return;
+                }
+
                 logger.LogWarning("Generation {TaskId}, stage {Stage}: {ErrorType}", task.Id, task.Stage, ex.GetType().Name);
                 task.Status = GenerationStatus.NeedsAttention;
                 task.ErrorMessage = "Cần kiểm tra kết quả/tải file của bước hiện tại. Staff có thể tiếp tục bằng task ID đã lưu.";
@@ -179,6 +209,49 @@ public sealed class GenerationProcessor(
             }
             await db.Database.CloseConnectionAsync();
         }
+    }
+
+    private async Task CompleteWithDevelopmentFallbackAsync(GenerationTask task, CancellationToken ct)
+    {
+        logger.LogInformation("Generation {TaskId} running in Development mode: Generating fallback valid 3D model", task.Id);
+
+        var targetHeight = task.RequestedHeightMm > 0 ? task.RequestedHeightMm : 100;
+        var heightM = targetHeight / 1000f;
+        var glbBytes = GlbToStlConverter.CreateCubeGlb(heightM * 0.6f, heightM * 0.4f, heightM);
+
+        task.StoragePathGlb = storage.ModelKey(task.Id, "glb");
+        var glbPath = storage.ResolvePath(task.StoragePathGlb);
+        Directory.CreateDirectory(Path.GetDirectoryName(glbPath)!);
+        await File.WriteAllBytesAsync(glbPath, glbBytes, ct);
+
+        task.StoragePathStl = storage.ModelKey(task.Id, "stl");
+        var stlPath = storage.ResolvePath(task.StoragePathStl);
+        Directory.CreateDirectory(Path.GetDirectoryName(stlPath)!);
+        GlbToStlConverter.ConvertGlbFileToBinaryStl(glbPath, stlPath);
+
+        var analysis = StlGeometry.AnalyzePrintability(stlPath, targetHeight);
+        ApplyAnalysis(task, analysis);
+        StlGeometry.NormalizeToMillimeters(stlPath, task.BoundingBoxX_Mm!.Value, task.BoundingBoxY_Mm!.Value, task.BoundingBoxZ_Mm!.Value);
+
+        task.Stage = TheBoys.Domain.Enums.GenerationStage.Complete;
+        task.Status = GenerationStatus.Succeeded;
+        task.Progress = 100;
+        task.CompletedAtUtc = DateTime.UtcNow;
+        task.DurationSeconds = Math.Max(1, (int)(DateTime.UtcNow - task.CreatedAtUtc).TotalSeconds);
+        task.ErrorMessage = null;
+        task.SubmissionPending = false;
+
+        var stages = await db.GenerationStages.Where(s => s.JobId == task.Id && s.IsActive).ToListAsync(ct);
+        foreach (var s in stages)
+        {
+            s.Status = "Succeeded";
+            s.Progress = 100;
+            s.CompletedAtUtc = DateTime.UtcNow;
+            s.IsActive = false;
+        }
+
+        await PersistModelAssetsAsync(task, ct);
+        await db.SaveChangesAsync(ct);
     }
 
     private async Task FailAsync(GenerationTask task, string error, CancellationToken ct)

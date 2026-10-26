@@ -1,4 +1,4 @@
-using System.Numerics;
+﻿using System.Numerics;
 using System.Text;
 using System.Text.Json;
 
@@ -370,5 +370,151 @@ public static class GlbToStlConverter
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Helper: Tạo file GLB (glTF 2.0 Binary) chứa khối hộp kín nước (watertight cube) 12 tam giác.
+    /// </summary>
+    public static byte[] CreateCubeGlb(float extentX, float extentY, float extentZ)
+    {
+        var vertices = new Vector3[]
+        {
+            new(0, 0, 0),
+            new(extentX, 0, 0),
+            new(extentX, extentY, 0),
+            new(0, extentY, 0),
+            new(0, 0, extentZ),
+            new(extentX, 0, extentZ),
+            new(extentX, extentY, extentZ),
+            new(0, extentY, extentZ)
+        };
+
+        var indices = new ushort[]
+        {
+            4, 5, 6,
+            4, 6, 7,
+            1, 0, 3,
+            1, 3, 2,
+            3, 2, 6,
+            3, 6, 7,
+            0, 1, 5,
+            0, 5, 4,
+            5, 1, 2,
+            5, 2, 6,
+            0, 4, 7,
+            0, 7, 3
+        };
+
+        var indicesBytes = new byte[indices.Length * 2];
+        Buffer.BlockCopy(indices, 0, indicesBytes, 0, indicesBytes.Length);
+
+        var verticesBytes = new byte[vertices.Length * 12];
+        for (var i = 0; i < vertices.Length; i++)
+        {
+            var offset = i * 12;
+            BitConverter.TryWriteBytes(verticesBytes.AsSpan(offset, 4), vertices[i].X);
+            BitConverter.TryWriteBytes(verticesBytes.AsSpan(offset + 4, 4), vertices[i].Y);
+            BitConverter.TryWriteBytes(verticesBytes.AsSpan(offset + 8, 4), vertices[i].Z);
+        }
+
+        var binBytes = new byte[indicesBytes.Length + verticesBytes.Length];
+        Buffer.BlockCopy(indicesBytes, 0, binBytes, 0, indicesBytes.Length);
+        Buffer.BlockCopy(verticesBytes, 0, binBytes, indicesBytes.Length, verticesBytes.Length);
+
+        var manifest = new
+        {
+            asset = new { version = "2.0" },
+            scene = 0,
+            scenes = new[] { new { nodes = new[] { 0 } } },
+            nodes = new[] { new { mesh = 0 } },
+            meshes = new[]
+            {
+                new
+                {
+                    primitives = new[]
+                    {
+                        new
+                        {
+                            attributes = new { POSITION = 1 },
+                            indices = 0,
+                            mode = 4
+                        }
+                    }
+                }
+            },
+            accessors = new object[]
+            {
+                new
+                {
+                    bufferView = 0,
+                    byteOffset = 0,
+                    componentType = 5123,
+                    count = indices.Length,
+                    type = "SCALAR"
+                },
+                new
+                {
+                    bufferView = 1,
+                    byteOffset = 0,
+                    componentType = 5126,
+                    count = vertices.Length,
+                    type = "VEC3",
+                    min = new[] { 0f, 0f, 0f },
+                    max = new[] { extentX, extentY, extentZ }
+                }
+            },
+            bufferViews = new[]
+            {
+                new
+                {
+                    buffer = 0,
+                    byteOffset = 0,
+                    byteLength = indicesBytes.Length,
+                    target = 34963
+                },
+                new
+                {
+                    buffer = 0,
+                    byteOffset = indicesBytes.Length,
+                    byteLength = verticesBytes.Length,
+                    target = 34962
+                }
+            },
+            buffers = new[]
+            {
+                new { byteLength = binBytes.Length }
+            }
+        };
+
+        var jsonString = JsonSerializer.Serialize(manifest);
+        var jsonBytes = Encoding.UTF8.GetBytes(jsonString);
+
+        var jsonPadding = (4 - (jsonBytes.Length % 4)) % 4;
+        var paddedJsonBytes = new byte[jsonBytes.Length + jsonPadding];
+        Buffer.BlockCopy(jsonBytes, 0, paddedJsonBytes, 0, jsonBytes.Length);
+        for (var i = 0; i < jsonPadding; i++) paddedJsonBytes[jsonBytes.Length + i] = 0x20;
+
+        var binPadding = (4 - (binBytes.Length % 4)) % 4;
+        var paddedBinBytes = new byte[binBytes.Length + binPadding];
+        Buffer.BlockCopy(binBytes, 0, paddedBinBytes, 0, binBytes.Length);
+
+        var totalLength = 12 + (8 + paddedJsonBytes.Length) + (8 + paddedBinBytes.Length);
+
+        using var ms = new MemoryStream(totalLength);
+        using var bw = new BinaryWriter(ms);
+
+        bw.Write(0x46546C67u);
+        bw.Write(2u);
+        bw.Write((uint)totalLength);
+
+        bw.Write((uint)paddedJsonBytes.Length);
+        bw.Write(0x4E4F534Au);
+        bw.Write(paddedJsonBytes);
+
+        bw.Write((uint)paddedBinBytes.Length);
+        bw.Write(0x004E4942u);
+        bw.Write(paddedBinBytes);
+
+        return ms.ToArray();
     }
 }

@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -269,6 +269,7 @@ static async Task<IResult> ExecuteHealthCheckAsync(ApplicationDbContext db, ICon
 }
 
 app.MapGet("/health", (ApplicationDbContext db, IConfiguration config, IWebHostEnvironment env) => ExecuteHealthCheckAsync(db, config, env)).AllowAnonymous();
+app.MapGet("/api/health", (ApplicationDbContext db, IConfiguration config, IWebHostEnvironment env) => ExecuteHealthCheckAsync(db, config, env)).AllowAnonymous();
 app.MapGet("/health/ready", (ApplicationDbContext db, IConfiguration config, IWebHostEnvironment env) => ExecuteHealthCheckAsync(db, config, env)).AllowAnonymous();
 
 app.MapControllers();
