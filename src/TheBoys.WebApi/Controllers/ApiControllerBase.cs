@@ -7,7 +7,7 @@ namespace TheBoys.WebApi.Controllers;
 public abstract class ApiControllerBase : ControllerBase
 {
     protected Guid UserId => Guid.Parse(User.FindFirstValue("sub")!);
-    protected bool IsManagement => User.IsInRole(Roles.Staff) || User.IsInRole(Roles.Admin);
+    protected bool IsManagement => User.IsInRole(Roles.Staff) || User.IsInRole(Roles.Admin) || User.IsInRole(Roles.Manager);
     protected bool CanAccess(Guid ownerId) => ownerId == UserId || IsManagement;
 
     protected IActionResult ProblemResult(TheBoys.Application.Common.Models.Error error) => error.Type switch

@@ -5,7 +5,8 @@ public enum UserRole
     Customer = 0,
     // Value 1 was PartnerLab. The migration maps legacy accounts to Staff.
     Staff = 2,
-    Admin = 3
+    Admin = 3,
+    Manager = 4
 }
 
 public enum TaskType

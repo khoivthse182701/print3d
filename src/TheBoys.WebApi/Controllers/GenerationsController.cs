@@ -210,7 +210,7 @@ public sealed class GenerationsController(ISender mediator, IModelStorage storag
             t.ReviewStatus,
             t.ReviewNote,
             t.ReviewedAtUtc,
-            imageUrl = $"/api/generations/{t.Id}/files/image",
+            imageUrl = t.InputImageUrl == null ? null : $"/api/generations/{t.Id}/files/image",
             glbUrl = t.StoragePathGlb == null ? null : $"/api/generations/{t.Id}/files/glb",
             stlUrl = t.Status != GenerationStatus.Succeeded || t.StoragePathStl == null ? null : $"/api/generations/{t.Id}/files/stl",
             providerTaskIds = !IsManagement ? null : new { generation = t.ProviderTaskId, resize = t.ResizeTaskId, convert = t.ConvertTaskId, analysis = t.AnalysisTaskId }

@@ -122,7 +122,7 @@ public sealed class OrdersV2Controller(ISender mediator, IApplicationDbContext d
         var fingerprintPayload = $"{id:N}:{UserId:N}:{note}";
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprintPayload)));
 
-        var isManagement = User.IsInRole("staff") || User.IsInRole("admin");
+        var isManagement = IsManagement;
         var command = new CreatePaymentAttemptCommand(UserId, id, key, fingerprint, isManagement);
         var result = await mediator.Send(command, ct);
 
