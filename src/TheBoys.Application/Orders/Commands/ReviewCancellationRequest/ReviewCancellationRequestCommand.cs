@@ -13,7 +13,8 @@ public sealed record ReviewCancellationRequestCommand(
     Guid RequestId,
     Guid DecidedByUserId,
     bool Approved,
-    string? DecisionNote
+    string? DecisionNote,
+    bool CanApproveRefund = true
 ) : IRequest<Result<OrderCancellationRequestDto>>;
 
 public sealed class ReviewCancellationRequestCommandHandler(
@@ -40,6 +41,10 @@ public sealed class ReviewCancellationRequestCommandHandler(
 
         if (command.Approved)
         {
+            if (!command.CanApproveRefund)
+            {
+                return Result<OrderCancellationRequestDto>.Failure(Error.Unauthorized("Forbidden", "Bạn không có quyền duyệt yêu cầu hủy hoàn tiền."));
+            }
             cancelReq.Approve(command.DecidedByUserId, command.DecisionNote, null, now);
 
             order.Status = OrderStatus.Cancelled;

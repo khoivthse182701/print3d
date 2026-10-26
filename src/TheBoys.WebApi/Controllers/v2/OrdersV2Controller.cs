@@ -122,7 +122,7 @@ public sealed class OrdersV2Controller(ISender mediator, IApplicationDbContext d
         var fingerprintPayload = $"{id:N}:{UserId:N}:{note}";
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(fingerprintPayload)));
 
-        var isManagement = User.IsInRole("staff") || User.IsInRole("admin");
+        var isManagement = IsManagement;
         var command = new CreatePaymentAttemptCommand(UserId, id, key, fingerprint, isManagement);
         var result = await mediator.Send(command, ct);
 
@@ -161,11 +161,25 @@ public sealed class OrdersV2Controller(ISender mediator, IApplicationDbContext d
         [FromBody] CancelOrderV2ApiRequest request,
         CancellationToken ct)
     {
-        var command = new CancelOrderV2Command(id, UserId, request.Reason, IsManagement, request.DecisionNote);
+        var isManager = User.IsInRole(Roles.Manager);
+        var canApproveRefund = (User.IsInRole(Roles.Staff) || User.IsInRole(Roles.Admin)) && !isManager;
+
+        var command = new CancelOrderV2Command(
+            OrderId: id,
+            UserId: UserId,
+            Reason: request.Reason,
+            IsManagement: IsManagement,
+            DecisionNote: request.DecisionNote,
+            CanApproveRefund: canApproveRefund
+        );
         var result = await mediator.Send(command, ct);
 
         if (result.IsFailure)
         {
+            if (result.Error.Code == "Forbidden")
+            {
+                return Forbid();
+            }
             return ProblemResult(result.Error);
         }
 
@@ -179,16 +193,29 @@ public sealed class OrdersV2Controller(ISender mediator, IApplicationDbContext d
         [FromBody] ReviewCancellationRequestApiRequest request,
         CancellationToken ct)
     {
+        var isManager = User.IsInRole(Roles.Manager);
+        var canApproveRefund = (User.IsInRole(Roles.Staff) || User.IsInRole(Roles.Admin)) && !isManager;
+
+        if (isManager && request.Approved)
+        {
+            return Forbid();
+        }
+
         var command = new ReviewCancellationRequestCommand(
             RequestId: requestId,
             DecidedByUserId: UserId,
             Approved: request.Approved,
-            DecisionNote: request.DecisionNote
+            DecisionNote: request.DecisionNote,
+            CanApproveRefund: canApproveRefund
         );
 
         var result = await mediator.Send(command, ct);
         if (result.IsFailure)
         {
+            if (result.Error.Code == "Forbidden")
+            {
+                return Forbid();
+            }
             return ProblemResult(result.Error);
         }
 
@@ -203,6 +230,11 @@ public sealed class OrdersV2Controller(ISender mediator, IApplicationDbContext d
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         CancellationToken ct)
     {
+        if (User.IsInRole(Roles.Manager))
+        {
+            return Forbid();
+        }
+
         if (string.IsNullOrWhiteSpace(idempotencyKey) || !Guid.TryParse(idempotencyKey, out var operationKey))
         {
             return BadRequest(new { message = "Header Idempotency-Key là bắt buộc và phải là UUID hợp lệ." });

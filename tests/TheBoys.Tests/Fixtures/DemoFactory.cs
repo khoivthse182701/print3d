@@ -27,6 +27,7 @@ public sealed class DemoFactory : WebApplicationFactory<Program>, IAsyncLifetime
     public Guid OtherId { get; private set; }
     public Guid StaffId { get; private set; }
     public Guid AdminId { get; private set; }
+    public Guid ManagerId { get; private set; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -70,7 +71,8 @@ public sealed class DemoFactory : WebApplicationFactory<Program>, IAsyncLifetime
             new User { Email = "customer@example.test", FullName = "Customer", Role = UserRole.Customer, AccountStatus = AccountStatus.Active, EmailVerifiedAtUtc = now, NormalizedEmail = "CUSTOMER@EXAMPLE.TEST", FreeTrialRemaining = 2 },
             new User { Email = "other@example.test", FullName = "Other", Role = UserRole.Customer, AccountStatus = AccountStatus.Active, EmailVerifiedAtUtc = now, NormalizedEmail = "OTHER@EXAMPLE.TEST", FreeTrialRemaining = 2 },
             new User { Email = "staff@example.test", FullName = "Staff", Role = UserRole.Staff, AccountStatus = AccountStatus.Active, EmailVerifiedAtUtc = now, NormalizedEmail = "STAFF@EXAMPLE.TEST" },
-            new User { Email = "admin@example.test", FullName = "Admin", Role = UserRole.Admin, AccountStatus = AccountStatus.Active, EmailVerifiedAtUtc = now, NormalizedEmail = "ADMIN@EXAMPLE.TEST" }
+            new User { Email = "admin@example.test", FullName = "Admin", Role = UserRole.Admin, AccountStatus = AccountStatus.Active, EmailVerifiedAtUtc = now, NormalizedEmail = "ADMIN@EXAMPLE.TEST" },
+            new User { Email = "manager@example.test", FullName = "Manager", Role = UserRole.Manager, AccountStatus = AccountStatus.Active, EmailVerifiedAtUtc = now, NormalizedEmail = "MANAGER@EXAMPLE.TEST" }
         };
         foreach (var user in users) user.PasswordHash = hasher.HashPassword(user, "Test-password-123!");
         db.Users.AddRange(users);
@@ -94,7 +96,7 @@ public sealed class DemoFactory : WebApplicationFactory<Program>, IAsyncLifetime
             db.ConsentRecords.Add(consent);
         }
         await db.SaveChangesAsync();
-        CustomerId = users[0].Id; OtherId = users[1].Id; StaffId = users[2].Id; AdminId = users[3].Id;
+        CustomerId = users[0].Id; OtherId = users[1].Id; StaffId = users[2].Id; AdminId = users[3].Id; ManagerId = users[4].Id;
     }
 
     public async Task<HttpClient> Client(Guid id)

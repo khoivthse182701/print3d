@@ -13,7 +13,8 @@ public sealed record CancelOrderV2Command(
     Guid UserId,
     string Reason,
     bool IsManagement,
-    string? DecisionNote = null
+    string? DecisionNote = null,
+    bool CanApproveRefund = false
 ) : IRequest<Result<CancelOrderV2Result>>;
 
 public sealed record CancelOrderV2Result(
@@ -111,12 +112,21 @@ public sealed class CancelOrderV2CommandHandler(
         }
 
         // Trường hợp 2: Đơn đã thanh toán (Paid hoặc RefundPending)
+        var canApprovePaidCancel = request.IsManagement && request.CanApproveRefund;
+
+        if (!canApprovePaidCancel && order.UserId != request.UserId)
+        {
+            return Result<CancelOrderV2Result>.Failure(Error.Unauthorized(
+                "Forbidden",
+                "Bạn không có quyền duyệt hoàn tiền hoặc hủy đơn đã thanh toán của người khác."
+            ));
+        }
         var inProduction = order.FulfillmentStatus is "Printing" or "PostProcessing" or "QualityCheck" or "Packaged" or "Shipping" or "Shipped" or "Delivered"
                            || order.PrintingStartedAtUtc != null;
 
         if (inProduction)
         {
-            if (!request.IsManagement)
+            if (!canApprovePaidCancel)
             {
                 return Result<CancelOrderV2Result>.Failure(Error.Conflict(
                     "CannotCancelInProduction",
@@ -125,7 +135,7 @@ public sealed class CancelOrderV2CommandHandler(
             }
         }
 
-        if (!request.IsManagement)
+        if (!canApprovePaidCancel)
         {
             // Khách hàng yêu cầu hủy đơn đã thanh toán: Tạo OrderCancellationRequest ở trạng thái Pending
             var existingPending = order.CancellationRequests.FirstOrDefault(c => c.Status == CancellationRequestStatus.Pending);

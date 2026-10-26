@@ -28,11 +28,12 @@ public sealed class UpdateUserRoleCommandHandler(
             "cus" or "customer" => UserRole.Customer,
             "staff" => UserRole.Staff,
             "admin" => UserRole.Admin,
+            "manager" or "mgr" => UserRole.Manager,
             _ => (UserRole?)null
         };
 
         if (role == null)
-            return Result<User>.Failure(Error.Validation("InvalidRole", "Role phải là cus, staff hoặc admin."));
+            return Result<User>.Failure(Error.Validation("InvalidRole", "Role phải là cus, staff, manager hoặc admin."));
 
         await using var transaction = await db.BeginTransactionAsync(IsolationLevel.Serializable, ct);
 

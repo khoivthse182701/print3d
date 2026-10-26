@@ -20,12 +20,14 @@ public static class Roles
 {
     public const string Customer = "cus";
     public const string Staff = "staff";
+    public const string Manager = "manager";
     public const string Admin = "admin";
-    public const string Management = "staff,admin";
+    public const string Management = "staff,manager,admin";
     public static string Name(UserRole role) => role switch
     {
         UserRole.Customer => Customer,
         UserRole.Staff => Staff,
+        UserRole.Manager => Manager,
         UserRole.Admin => Admin,
         _ => "disabled"
     };
@@ -106,4 +108,3 @@ public sealed class TokenService(JwtOptions options)
         };
     }
 }
-

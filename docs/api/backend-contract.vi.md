@@ -1,12 +1,12 @@
 # Hợp đồng BE–FE
 
-FE và BE riêng repo. Bảng API hiện tại ở [inventory](../review/flow-inventory.vi.md); các endpoint trong mục **Route v2 đã triển khai** đã có handler thực tế và kiểm chứng integration; các route v2 còn lại trong bảng dưới là **đề xuất chưa triển khai**. OpenAPI runtime hiện tại là nguồn contract cho FE đang chạy, không dùng endpoint v2 đề xuất trước khi PR tương ứng được merge/deploy.
+FE và BE riêng repo. Bảng API hiện tại ở [inventory](../review/flow-inventory.vi.md); phân quyền 4 vai trò (Customer, Staff, Manager, Admin) chi tiết tại [đặc tả role Manager](../requirements/manager-role.vi.md); các endpoint trong mục **Route v2 đã triển khai** đã có handler thực tế và kiểm chứng integration; các route v2 còn lại trong bảng dưới là **đề xuất chưa triển khai**. OpenAPI runtime hiện tại là nguồn contract cho FE đang chạy, không dùng endpoint v2 đề xuất trước khi PR tương ứng được merge/deploy.
 
 ## Route v2 đã triển khai (STAFF-001 — Slice hàng đợi vận hành Staff)
 
 Phạm vi: Cung cấp hàng đợi vận hành đọc (read-only) phục vụ điều phối kỹ thuật và đơn hàng theo **FR-21, UC-17 (một phần)**. Chưa bao gồm reconcile/review/history toàn diện (thuộc các task kế tiếp STAFF-002, STAFF-003).
 
-Quyền truy cập: Bắt buộc Bearer JWT và thuộc role Management (`staff` hoặc `admin`). Anonymous trả `401 Unauthorized`; Customer (`cus`) trả `403 Forbidden`.
+Quyền truy cập: Bắt buộc Bearer JWT và thuộc role Management (`staff`, `manager` hoặc `admin`). Anonymous trả `401 Unauthorized`; Customer (`cus`) trả `403 Forbidden`.
 
 ### 1. GET `/api/v2/staff/generation-jobs`
 

@@ -277,6 +277,19 @@ public sealed class SandboxPaymentGateway(IClock clock) : IPaymentGateway
             ));
         }
 
+        if (merchantReference.Contains("SIMULATE_OFFLINE_UNSUPPORTED", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(new QueryRefundResult(
+                Success: false,
+                ProviderReference: null,
+                Status: "NeedsAttention",
+                AmountVnd: null,
+                CompletedAtUtc: clock.UtcNow,
+                RawStatus: "OFFLINE_QUERY_UNSUPPORTED",
+                ErrorMessage: "Cổng thanh toán không hỗ trợ tra cứu đối soát tự động."
+            ));
+        }
+
         return Task.FromResult(new QueryRefundResult(
             Success: true,
             ProviderReference: $"SANDBOX-REF-{operationKey:N}",

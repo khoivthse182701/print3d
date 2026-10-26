@@ -10,7 +10,7 @@ Phiên bản 1.0 · 19/10/2026 · baseline code `04874ed` · trạng thái: đ�
 2. [Kiểm kê luồng và API](review/flow-inventory.vi.md): toàn bộ điểm vào hiện có và luồng còn thiếu.
 3. [Nghiên cứu sản phẩm tham khảo](research/competitor-study.vi.md): Tripo, Meshy, Tencent; nguồn chính thức và quyết định phạm vi.
 4. [SRS](requirements/SRS.vi.md): yêu cầu chức năng, phi chức năng, quy tắc, tiêu chí nghiệm thu.
-5. [Đặc tả use case](requirements/use-cases.vi.md) và [truy vết](requirements/traceability.vi.md).
+5. [Đặc tả use case](requirements/use-cases.vi.md), [truy vết](requirements/traceability.vi.md), và [đặc tả role Manager](requirements/manager-role.vi.md).
 6. [Thiết kế SWD và Mermaid](architecture/README.md): 5 loại sơ đồ chính theo slide môn học; ERD và communication bổ sung.
 7. [Thiết kế DB](architecture/database-design.vi.md), [DDL vNext](../database/design/vnext.sql), [kế hoạch migration](../database/migrations/README.md).
 8. [Hợp đồng BE–FE](api/backend-contract.vi.md), [backlog triển khai](planning/implementation-backlog.vi.md), [kết quả kiểm chứng](review/validation.vi.md).

@@ -90,6 +90,11 @@ public sealed class DefectReportsV2Controller(ISender mediator) : ApiControllerB
             return BadRequest(new { message = "Loại giải quyết không hợp lệ. Chấp nhận: ReprintApproved, RefundApproved, Rejected." });
         }
 
+        if (resolutionType == DefectResolutionType.RefundApproved && User.IsInRole(Roles.Manager))
+        {
+            return Forbid();
+        }
+
         var command = new ResolveDefectReportCommand(
             ReportId: reportId,
             ActorUserId: UserId,
