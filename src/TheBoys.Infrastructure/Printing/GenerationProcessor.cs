@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -127,13 +127,41 @@ public sealed class GenerationProcessor(
 
                     if (result.Status is "FAILED" or "CANCELED")
                     {
-                        if (env.IsDevelopment() && provider is Hunyuan3DProvider or MeshyProvider or TripoProvider)
+                        var isTransientProviderError = !string.IsNullOrEmpty(result.Error) &&
+                            (result.Error.Contains("internal service error", StringComparison.OrdinalIgnoreCase) ||
+                             result.Error.Contains("temporar", StringComparison.OrdinalIgnoreCase) ||
+                             result.Error.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+                             result.Error.Contains("overload", StringComparison.OrdinalIgnoreCase));
+
+                        if (task.Stage == TheBoys.Domain.Enums.GenerationStage.Generate && isTransientProviderError && task.RetryCount < 2)
+                        {
+                            task.RetryCount++;
+                            task.ProviderTaskId = null;
+                            task.Status = GenerationStatus.Queued;
+                            task.Progress = 0;
+                            task.NextPollAtUtc = DateTime.UtcNow.AddSeconds(5);
+                            task.ErrorMessage = $"AI Provider tạm thời báo lỗi ({result.Error}). Hệ thống đang tự động thử lại (lần {task.RetryCount}/2)...";
+                            logger.LogWarning("Task {Id} gặp lỗi transient từ provider ({Error}). Tự động thử lại lần {RetryCount}.", task.Id, result.Error, task.RetryCount);
+
+                            if (activeStage != null)
+                            {
+                                activeStage.ProviderTaskId = null;
+                                activeStage.Status = "Queued";
+                                activeStage.Progress = 0;
+                                activeStage.NextPollAtUtc = task.NextPollAtUtc;
+                                activeStage.ErrorMessage = task.ErrorMessage;
+                            }
+                        }
+                        else if (env.IsDevelopment() && provider is Hunyuan3DProvider or MeshyProvider or TripoProvider)
                         {
                             logger.LogWarning("Provider {Provider} returned FAILED ({Error}) in Development mode. Completing with sample 3D fallback.", provider.Name, result.Error);
                             await CompleteWithDevelopmentFallbackAsync(task, ct);
                             return;
                         }
-                        await FailAsync(task, result.Error ?? $"{provider.Name} không hoàn tất task.", ct);
+                        else
+                        {
+                            await FailAsync(task, result.Error ?? $"{provider.Name} không hoàn tất task.", ct);
+                        }
                     }
                     else if (result.Status == "SUCCEEDED")
                         await FinishStageAsync(task, provider, result, ct);
